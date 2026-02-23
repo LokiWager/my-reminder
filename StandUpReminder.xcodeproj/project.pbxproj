@@ -1,0 +1,452 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		168FF2A4F446607F26D4E460 /* StandUpReminderWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1C9412A6AB68E3A62895EC29 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
+		317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */; };
+		4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */; };
+		5EBF201A4258A70F3473A5D7 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
+		7428F3DE3EEDEBC881F6C459 /* StandUpReminderWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */; };
+		8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */; };
+		EA2EA5DED68BCE84DDEA78F1 /* ReminderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */; };
+		F13801F0D981C5510AFD65AA /* StandUpReminderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CB56D8EFF69F77B34C72D0E1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D91D2A39003460E3D106527F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 017E6705B8F0B93EF23D7F17;
+			remoteInfo = StandUpReminderWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		EC1AB96ADC539430B0A2EDF3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				168FF2A4F446607F26D4E460 /* StandUpReminderWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandUpReminderWidget.swift; sourceTree = "<group>"; };
+		2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StandUpReminderWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
+		8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A0510F94E70390EDC1F12533 /* StandUpReminder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StandUpReminder.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandUpReminderApp.swift; sourceTree = "<group>"; };
+		BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSettings.swift; sourceTree = "<group>"; };
+		CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderViewModel.swift; sourceTree = "<group>"; };
+		F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = logo_chibi.png; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		614A553A74B532E18502F3B4 /* StandUpReminderWidget */ = {
+			isa = PBXGroup;
+			children = (
+				13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */,
+			);
+			name = StandUpReminderWidget;
+			path = Sources/StandUpReminderWidget;
+			sourceTree = "<group>";
+		};
+		7949DE6E35E54362FB310E08 = {
+			isa = PBXGroup;
+			children = (
+				AB42D4D651D0480A5A38F7C6 /* Resources */,
+				C6773DDAB80C1F06E3229983 /* StandUpReminder */,
+				614A553A74B532E18502F3B4 /* StandUpReminderWidget */,
+				960917D5C6A58291E0AACCB7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		960917D5C6A58291E0AACCB7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A0510F94E70390EDC1F12533 /* StandUpReminder.app */,
+				2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AB42D4D651D0480A5A38F7C6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		C6773DDAB80C1F06E3229983 /* StandUpReminder */ = {
+			isa = PBXGroup;
+			children = (
+				8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */,
+				53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */,
+				BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */,
+				CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */,
+				B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */,
+			);
+			name = StandUpReminder;
+			path = Sources/StandUpReminder;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		017E6705B8F0B93EF23D7F17 /* StandUpReminderWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 56469E5985057A315E9BC6F6 /* Build configuration list for PBXNativeTarget "StandUpReminderWidgetExtension" */;
+			buildPhases = (
+				9AAEDF36B71147C70EDC4B32 /* Sources */,
+				66D05BC434BEE7094F5F4B48 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StandUpReminderWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = StandUpReminderWidgetExtension;
+			productReference = 2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		F74CF7C291BF554AC6D3112A /* StandUpReminder */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9D3740B21D3A07AEFAD93C06 /* Build configuration list for PBXNativeTarget "StandUpReminder" */;
+			buildPhases = (
+				4CF54DCBF7B637ED366E7BD1 /* Sources */,
+				D0D71A80B6159EE6340952B6 /* Resources */,
+				EC1AB96ADC539430B0A2EDF3 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FCE38C48CBDBF9389C6009D5 /* PBXTargetDependency */,
+			);
+			name = StandUpReminder;
+			packageProductDependencies = (
+			);
+			productName = StandUpReminder;
+			productReference = A0510F94E70390EDC1F12533 /* StandUpReminder.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D91D2A39003460E3D106527F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = FD4D76D88AC2FF1F7DD97B76 /* Build configuration list for PBXProject "StandUpReminder" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7949DE6E35E54362FB310E08;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F74CF7C291BF554AC6D3112A /* StandUpReminder */,
+				017E6705B8F0B93EF23D7F17 /* StandUpReminderWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		66D05BC434BEE7094F5F4B48 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C9412A6AB68E3A62895EC29 /* logo_chibi.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D0D71A80B6159EE6340952B6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EBF201A4258A70F3473A5D7 /* logo_chibi.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4CF54DCBF7B637ED366E7BD1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */,
+				8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */,
+				4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */,
+				EA2EA5DED68BCE84DDEA78F1 /* ReminderViewModel.swift in Sources */,
+				F13801F0D981C5510AFD65AA /* StandUpReminderApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9AAEDF36B71147C70EDC4B32 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7428F3DE3EEDEBC881F6C459 /* StandUpReminderWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FCE38C48CBDBF9389C6009D5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 017E6705B8F0B93EF23D7F17 /* StandUpReminderWidgetExtension */;
+			targetProxy = CB56D8EFF69F77B34C72D0E1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2613ABA2D405C9E004615332 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.haotingyi.standupreminder.widget;
+				PRODUCT_NAME = StandUpReminderWidgetExtension;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		6AEF00531E4A33197CED4B8E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.haotingyi.standupreminder;
+				PRODUCT_NAME = StandUpReminder;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		7129D110E7A859FF701FEC4D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		745D5200BA5F01FB93525430 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		8F499CC0E1EB5C1A84970AA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.haotingyi.standupreminder.widget;
+				PRODUCT_NAME = StandUpReminderWidgetExtension;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		CEE1C8E0332D21FFBE18BC28 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.haotingyi.standupreminder;
+				PRODUCT_NAME = StandUpReminder;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		56469E5985057A315E9BC6F6 /* Build configuration list for PBXNativeTarget "StandUpReminderWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8F499CC0E1EB5C1A84970AA8 /* Debug */,
+				2613ABA2D405C9E004615332 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9D3740B21D3A07AEFAD93C06 /* Build configuration list for PBXNativeTarget "StandUpReminder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6AEF00531E4A33197CED4B8E /* Debug */,
+				CEE1C8E0332D21FFBE18BC28 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FD4D76D88AC2FF1F7DD97B76 /* Build configuration list for PBXProject "StandUpReminder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				745D5200BA5F01FB93525430 /* Debug */,
+				7129D110E7A859FF701FEC4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D91D2A39003460E3D106527F /* Project object */;
+}
