@@ -4,14 +4,6 @@
 <dict>
 	<key>files</key>
 	<dict>
-		<key>Resources/Metadata.appintents/extract.actionsdata</key>
-		<data>
-		0lNsP1bT3NC2rplZn5a3ZR5rvbg=
-		</data>
-		<key>Resources/Metadata.appintents/version.json</key>
-		<data>
-		oHmZga5LJQVc//cQW3VvTBnzmq8=
-		</data>
 		<key>Resources/logo_chibi.png</key>
 		<data>
 		fruRDEZJX7+09RNM2cLdDn60I6U=
@@ -19,20 +11,6 @@
 	</dict>
 	<key>files2</key>
 	<dict>
-		<key>Resources/Metadata.appintents/extract.actionsdata</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			MxwZDjn8RDsjzW1P5j0HXYqoXB4iH0hnFQC5maa9XRg=
-			</data>
-		</dict>
-		<key>Resources/Metadata.appintents/version.json</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			6LJbIO58DeKo5IvjGCfQzvIeSnq584I/VYy6Gt7JkpM=
-			</data>
-		</dict>
 		<key>Resources/logo_chibi.png</key>
 		<dict>
 			<key>hash2</key>

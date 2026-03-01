@@ -23,7 +23,7 @@ private enum AppSection: String, CaseIterable, Hashable {
 }
 
 private struct TimerSnapshot {
-    let headline: String
+    let headline: String?
     let subtitle: String
 }
 
@@ -43,12 +43,46 @@ private struct PeriodDraft: Identifiable {
     var endMinutes: Int
 
     init(range: TimeRange) {
-        self.startMinutes = range.startMinutes
-        self.endMinutes = range.endMinutes
+        startMinutes = range.startMinutes
+        endMinutes = range.endMinutes
     }
 
     var timeRange: TimeRange {
         TimeRange(startMinutes: startMinutes, endMinutes: endMinutes)
+    }
+}
+
+private struct ExtraReminderDraft: Identifiable {
+    var id: UUID
+    var title: String
+    var timeMinutes: Int
+    var activeDays: [Bool]
+    var isEnabled: Bool
+
+    init(reminder: TimedReminder) {
+        id = reminder.id
+        title = reminder.title
+        timeMinutes = reminder.timeMinutes
+        activeDays = reminder.activeDays.count == 7 ? reminder.activeDays : ReminderSettings.default.activeDays
+        isEnabled = reminder.isEnabled
+    }
+
+    init(title: String = "New Item", timeMinutes: Int = 9 * 60) {
+        id = UUID()
+        self.title = title
+        self.timeMinutes = timeMinutes
+        activeDays = ReminderSettings.default.activeDays
+        isEnabled = true
+    }
+
+    var model: TimedReminder {
+        TimedReminder(
+            id: id,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Item Reminder" : title,
+            timeMinutes: timeMinutes,
+            activeDays: activeDays,
+            isEnabled: isEnabled
+        )
     }
 }
 
@@ -60,12 +94,31 @@ struct ContentView: View {
         PeriodDraft(range: .afternoon),
         PeriodDraft(range: .evening)
     ]
+    @State private var extraReminders: [ExtraReminderDraft] = ReminderSettings.defaultExtraReminders.map(ExtraReminderDraft.init(reminder:))
     @State private var intervalMinutes = 45
     @State private var standMinutes = 15
     @State private var activeDays: [Bool] = [true, true, true, true, true, false, false]
 
     private let timeOptions = Array(stride(from: 0, through: 23 * 60 + 30, by: 30))
     private let daySymbols = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    private let shortDaySymbols = ["M", "T", "W", "T", "F", "S", "S"]
+    private let standIntervals = [15, 30, 45, 60, 75, 90]
+    private let standBreaks = [5, 10, 15, 20, 25, 30]
+
+    private var draftSettings: ReminderSettings {
+        ReminderSettings(
+            isEnabled: true,
+            intervalMinutes: intervalMinutes,
+            standMinutes: standMinutes,
+            periods: periods.map(\.timeRange),
+            activeDays: activeDays,
+            extraReminders: extraReminders.map(\.model)
+        )
+    }
+
+    private var hasUnsavedChanges: Bool {
+        draftSettings != viewModel.settings
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -105,6 +158,8 @@ struct ContentView: View {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     let timer = timerSnapshot(for: context.date)
                     let progress = progressSnapshot(for: context.date)
+                    let todayItems = todayItemLines(for: context.date)
+                    let inWorkWindow = timer.headline != nil
 
                     VStack(spacing: 14) {
                         Image("logo_chibi")
@@ -113,31 +168,41 @@ struct ContentView: View {
                             .frame(maxWidth: 180)
                             .clipShape(RoundedRectangle(cornerRadius: 20))
 
-                        Text(timer.headline)
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
+                        if let headline = timer.headline {
+                            Text(headline)
+                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                        }
                         Text(timer.subtitle)
                             .font(.headline)
                             .foregroundStyle(.secondary)
 
-                        ProgressView(value: progress.fraction)
-                            .progressViewStyle(.linear)
-                            .frame(maxWidth: 360)
+                        if inWorkWindow {
+                            ProgressView(value: progress.fraction)
+                                .progressViewStyle(.linear)
+                                .frame(maxWidth: 360)
 
-                        Text("Today's reminders: \(progress.done)/\(progress.total)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            Text("Today's stand reminders: \(progress.done)/\(progress.total)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Today's Items")
+                                    .font(.headline)
+                                if todayItems.isEmpty {
+                                    Text("No extra items today.")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    ForEach(todayItems.prefix(4), id: \.self) { item in
+                                        Text("• \(item)")
+                                            .font(.callout)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: 360, alignment: .leading)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                 }
-
-                Button {
-                    viewModel.toggleEnabled()
-                } label: {
-                    Text(viewModel.settings.isEnabled ? "Turn Off" : "Turn On")
-                        .frame(maxWidth: 280)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
 
                 Text(viewModel.statusMessage)
                     .font(.callout)
@@ -157,16 +222,17 @@ struct ContentView: View {
                     let progress = progressSnapshot(for: context.date)
 
                     VStack(alignment: .leading, spacing: 12) {
-                        insightRow("Status", value: viewModel.settings.isEnabled ? "On" : "Off")
+                        insightRow("Status", value: "Active")
                         insightRow("Interval", value: "\(viewModel.settings.intervalMinutes) min")
                         insightRow("Break Length", value: "\(viewModel.settings.standMinutes) min")
                         insightRow("Today", value: "\(progress.done)/\(progress.total)")
+                        insightRow("Custom Items", value: "\(viewModel.settings.extraReminders.filter { $0.isEnabled }.count)")
                     }
                 }
 
                 Divider()
 
-                Text("Periods")
+                Text("Configured Schedule")
                     .font(.headline)
                 Text(viewModel.periodSummary())
                     .foregroundStyle(.secondary)
@@ -180,23 +246,27 @@ struct ContentView: View {
     private var preferencesView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Form {
-                    Section("Schedule") {
+                Text("Stand-up")
+                    .font(.title.weight(.bold))
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 14) {
                         ForEach(Array(periods.indices), id: \.self) { idx in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Period \(idx + 1)")
                                     .font(.subheadline.weight(.semibold))
 
-                                LabeledTimePicker(
-                                    title: "Start",
-                                    selection: $periods[idx].startMinutes,
-                                    options: timeOptions
-                                )
-                                LabeledTimePicker(
-                                    title: "End",
-                                    selection: $periods[idx].endMinutes,
-                                    options: timeOptions
-                                )
+                                HStack {
+                                    LabeledTimePicker(
+                                        title: "Start",
+                                        selection: $periods[idx].startMinutes,
+                                        options: timeOptions
+                                    )
+                                    LabeledTimePicker(
+                                        title: "End",
+                                        selection: $periods[idx].endMinutes,
+                                        options: timeOptions
+                                    )
+                                }
 
                                 HStack {
                                     Spacer()
@@ -206,7 +276,9 @@ struct ContentView: View {
                                     .disabled(periods.count <= 1)
                                 }
                             }
-                            .padding(.vertical, 4)
+                            .padding(10)
+                            .background(Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
 
                         Button {
@@ -214,30 +286,76 @@ struct ContentView: View {
                         } label: {
                             Label("Add Period", systemImage: "plus.circle.fill")
                         }
-                    }
 
-                    Section("Active Days") {
+                        Divider()
+
                         HStack(spacing: 12) {
                             ForEach(daySymbols.indices, id: \.self) { idx in
                                 Toggle(daySymbols[idx], isOn: $activeDays[idx])
                                     .toggleStyle(.checkbox)
                             }
                         }
-                    }
 
-                    Section("Preferences") {
-                        Picker("Sit Interval", selection: $intervalMinutes) {
-                            ForEach([15, 30, 45, 60, 75, 90], id: \.self) { value in
-                                Text("\(value) min").tag(value)
+                        Divider()
+
+                        HStack {
+                            Picker("Sit Interval", selection: $intervalMinutes) {
+                                ForEach(standIntervals, id: \.self) { value in
+                                    Text("\(value) min").tag(value)
+                                }
+                            }
+                            Picker("Stand Break", selection: $standMinutes) {
+                                ForEach(standBreaks, id: \.self) { value in
+                                    Text("\(value) min").tag(value)
+                                }
                             }
                         }
+                    }
+                    .padding(.top, 4)
+                }
 
-                        Picker("Stand Break", selection: $standMinutes) {
-                            ForEach([5, 10, 15, 20, 25, 30], id: \.self) { value in
-                                Text("\(value) min").tag(value)
+                Text("Reminder Items")
+                    .font(.title.weight(.bold))
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(extraReminders.indices), id: \.self) { idx in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle("Enable", isOn: $extraReminders[idx].isEnabled)
+
+                                TextField("Title", text: $extraReminders[idx].title)
+
+                                LabeledTimePicker(
+                                    title: "Time",
+                                    selection: $extraReminders[idx].timeMinutes,
+                                    options: timeOptions
+                                )
+
+                                HStack(spacing: 8) {
+                                    ForEach(shortDaySymbols.indices, id: \.self) { dayIndex in
+                                        Toggle(shortDaySymbols[dayIndex], isOn: reminderDayBinding(reminderIndex: idx, dayIndex: dayIndex))
+                                            .toggleStyle(.checkbox)
+                                    }
+                                }
+
+                                HStack {
+                                    Spacer()
+                                    Button("Remove Item", role: .destructive) {
+                                        removeExtraReminder(at: idx)
+                                    }
+                                }
                             }
+                            .padding(10)
+                            .background(Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        Button {
+                            addExtraReminder()
+                        } label: {
+                            Label("Add Item Reminder", systemImage: "plus.circle.fill")
                         }
                     }
+                    .padding(.top, 4)
                 }
 
                 HStack {
@@ -254,11 +372,31 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .disabled(!hasUnsavedChanges)
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Preferences")
+    }
+
+    private func reminderDayBinding(reminderIndex: Int, dayIndex: Int) -> Binding<Bool> {
+        Binding(
+            get: {
+                guard extraReminders.indices.contains(reminderIndex),
+                      extraReminders[reminderIndex].activeDays.indices.contains(dayIndex) else {
+                    return false
+                }
+                return extraReminders[reminderIndex].activeDays[dayIndex]
+            },
+            set: { newValue in
+                guard extraReminders.indices.contains(reminderIndex) else { return }
+                if extraReminders[reminderIndex].activeDays.count != 7 {
+                    extraReminders[reminderIndex].activeDays = ReminderSettings.default.activeDays
+                }
+                extraReminders[reminderIndex].activeDays[dayIndex] = newValue
+            }
+        )
     }
 
     private func addPeriod() {
@@ -270,6 +408,15 @@ struct ContentView: View {
         periods.remove(at: index)
     }
 
+    private func addExtraReminder() {
+        extraReminders.append(ExtraReminderDraft())
+    }
+
+    private func removeExtraReminder(at index: Int) {
+        guard extraReminders.indices.contains(index) else { return }
+        extraReminders.remove(at: index)
+    }
+
     private func syncFromModel() {
         let sourcePeriods = viewModel.settings.periods.isEmpty
             ? ReminderSettings.default.periods
@@ -279,30 +426,29 @@ struct ContentView: View {
         intervalMinutes = viewModel.settings.intervalMinutes
         standMinutes = viewModel.settings.standMinutes
         activeDays = viewModel.settings.activeDays
+        extraReminders = viewModel.settings.extraReminders.map(ExtraReminderDraft.init(reminder:))
+        if extraReminders.isEmpty {
+            extraReminders = ReminderSettings.defaultExtraReminders.map(ExtraReminderDraft.init(reminder:))
+        }
     }
 
     private func saveToModel() {
-        viewModel.settings.intervalMinutes = intervalMinutes
-        viewModel.settings.standMinutes = standMinutes
-        viewModel.settings.periods = periods.map(\.timeRange)
-        viewModel.settings.activeDays = activeDays
-        viewModel.saveSettings()
+        _ = viewModel.saveSettings(draftSettings)
     }
 
     private func timerSnapshot(for date: Date) -> TimerSnapshot {
-        guard viewModel.settings.isEnabled else {
-            return TimerSnapshot(headline: "--", subtitle: "Reminders Off")
+        guard isInActiveWindow(date) else {
+            return TimerSnapshot(
+                headline: nil,
+                subtitle: "Off work hours. No extra pay, handle your own plans."
+            )
         }
 
-        guard let minutes = minutesUntilNextReminder(from: date) else {
-            return TimerSnapshot(headline: "--", subtitle: "No upcoming reminder")
+        guard let minutes = minutesUntilNextStandReminder(from: date, inCurrentWindowOnly: true) else {
+            return TimerSnapshot(headline: nil, subtitle: "No upcoming stand reminder in this window.")
         }
 
-        if isInActiveWindow(date) {
-            return TimerSnapshot(headline: "\(minutes) min", subtitle: "Next stand-up reminder")
-        }
-
-        return TimerSnapshot(headline: "\(minutes) min", subtitle: "Until active period")
+        return TimerSnapshot(headline: "\(minutes) min", subtitle: "Until next stand-up reminder")
     }
 
     private func progressSnapshot(for date: Date) -> DailyProgressSnapshot {
@@ -312,28 +458,31 @@ struct ContentView: View {
 
         guard viewModel.settings.activeDays.indices.contains(mondayIndex),
               viewModel.settings.activeDays[mondayIndex] else {
-            return DailyProgressSnapshot(done: 0, total: dailyReminderSlots().count)
+            return DailyProgressSnapshot(done: 0, total: dailyStandReminderSlots().count)
         }
 
-        let slots = dailyReminderSlots()
+        let slots = dailyStandReminderSlots()
         let nowMinute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
         let done = slots.filter { $0 <= nowMinute }.count
         return DailyProgressSnapshot(done: done, total: slots.count)
     }
 
-    private func minutesUntilNextReminder(from date: Date) -> Int? {
-        guard viewModel.settings.isEnabled, viewModel.settings.intervalMinutes > 0 else {
+    private func minutesUntilNextStandReminder(from date: Date, inCurrentWindowOnly: Bool = false) -> Int? {
+        guard viewModel.settings.intervalMinutes > 0 else {
             return nil
         }
 
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: date)
-        let slots = dailyReminderSlots()
+        let slots = dailyStandReminderSlots()
         guard !slots.isEmpty else {
             return nil
         }
 
         for offset in 0...13 {
+            if inCurrentWindowOnly && offset > 0 {
+                break
+            }
             guard let targetDay = calendar.date(byAdding: .day, value: offset, to: dayStart) else { continue }
             let weekday = calendar.component(.weekday, from: targetDay)
             let mondayIndex = (weekday + 5) % 7
@@ -350,16 +499,41 @@ struct ContentView: View {
                     continue
                 }
 
+                if inCurrentWindowOnly {
+                    let currentMinute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
+                    let activeInThisWindow = viewModel.settings.periods.contains { period in
+                        period.isValid && currentMinute >= period.startMinutes && currentMinute <= period.endMinutes &&
+                            minute >= period.startMinutes && minute <= period.endMinutes
+                    }
+                    guard activeInThisWindow else { continue }
+                }
+
                 if reminderDate > date {
                     return max(Int(ceil(reminderDate.timeIntervalSince(date) / 60.0)), 1)
                 }
             }
         }
-
         return nil
     }
 
-    private func dailyReminderSlots() -> [Int] {
+    private func todayItemLines(for date: Date) -> [String] {
+        let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: date)
+        let mondayIndex = (weekday + 5) % 7
+
+        return viewModel.settings.extraReminders
+            .filter { reminder in
+                reminder.isEnabled &&
+                    reminder.activeDays.indices.contains(mondayIndex) &&
+                    reminder.activeDays[mondayIndex]
+            }
+            .sorted { $0.timeMinutes < $1.timeMinutes }
+            .map { reminder in
+                "\(reminder.title) · \(ReminderScheduler.formatMinutes(reminder.timeMinutes))"
+            }
+    }
+
+    private func dailyStandReminderSlots() -> [Int] {
         var slots: Set<Int> = []
         let interval = max(viewModel.settings.intervalMinutes, 1)
 

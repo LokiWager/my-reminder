@@ -6,7 +6,7 @@
 	<dict>
 		<key>Resources/AppIcon.icns</key>
 		<data>
-		cHwYIvZ7oDwT97A2apq3IE0WmeY=
+		0vO3Pr70nbo+OnYZzpGVpCh1eA0=
 		</data>
 		<key>Resources/logo_chibi.png</key>
 		<data>
@@ -19,16 +19,16 @@
 		<dict>
 			<key>cdhash</key>
 			<data>
-			b8BozVbTuV/l3uB367P38CmQnJU=
+			+cdd4qEUmFyxYCWoW6r4QmJR1ns=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"6fc068cd56d3b95fe5dee077ebb3f7f029909c95"</string>
+			<string>cdhash H"f9c75de2a114985cb16025a85baaf8426251d67b"</string>
 		</dict>
 		<key>Resources/AppIcon.icns</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			TEd3ujyYQlTXCTPLO+vnKwNUHWR8jtGaFr8GyHNwuKQ=
+			+/+1J0+hofSO5pp+ki/mCJx8dCUduHxoYKXnyDv6FhE=
 			</data>
 		</dict>
 		<key>Resources/logo_chibi.png</key>

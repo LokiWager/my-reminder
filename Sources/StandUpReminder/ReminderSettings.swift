@@ -12,19 +12,65 @@ struct TimeRange: Codable, Equatable {
     }
 }
 
+struct TimedReminder: Codable, Equatable, Identifiable {
+    var id: UUID
+    var title: String
+    var timeMinutes: Int
+    var activeDays: [Bool]
+    var isEnabled: Bool
+
+    private static let defaultDays = [true, true, true, true, true, false, false]
+
+    init(id: UUID = UUID(), title: String, timeMinutes: Int, activeDays: [Bool] = TimedReminder.defaultDays, isEnabled: Bool = true) {
+        self.id = id
+        self.title = title
+        self.timeMinutes = timeMinutes
+        self.activeDays = activeDays.count == 7 ? activeDays : TimedReminder.defaultDays
+        self.isEnabled = isEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case timeMinutes
+        case activeDays
+        case isEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        timeMinutes = try container.decode(Int.self, forKey: .timeMinutes)
+        activeDays = try container.decodeIfPresent([Bool].self, forKey: .activeDays) ?? TimedReminder.defaultDays
+        if activeDays.count != 7 {
+            activeDays = TimedReminder.defaultDays
+        }
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+    }
+}
+
 struct ReminderSettings: Codable, Equatable {
     var isEnabled: Bool
     var intervalMinutes: Int
     var standMinutes: Int
     var periods: [TimeRange]
     var activeDays: [Bool]
+    var extraReminders: [TimedReminder]
+
+    static let defaultExtraReminders: [TimedReminder] = [
+        TimedReminder(title: "Study Time", timeMinutes: 16 * 60),
+        TimedReminder(title: "Dinner Time", timeMinutes: 17 * 60),
+        TimedReminder(title: "Study Time", timeMinutes: 20 * 60)
+    ]
 
     static let `default` = ReminderSettings(
-        isEnabled: false,
+        isEnabled: true,
         intervalMinutes: 45,
         standMinutes: 15,
         periods: [.afternoon, .evening],
-        activeDays: [true, true, true, true, true, false, false]
+        activeDays: [true, true, true, true, true, false, false],
+        extraReminders: ReminderSettings.defaultExtraReminders
     )
 
     private enum CodingKeys: String, CodingKey {
@@ -33,14 +79,23 @@ struct ReminderSettings: Codable, Equatable {
         case standMinutes
         case periods
         case activeDays
+        case extraReminders
     }
 
-    init(isEnabled: Bool, intervalMinutes: Int, standMinutes: Int, periods: [TimeRange], activeDays: [Bool]) {
+    init(
+        isEnabled: Bool,
+        intervalMinutes: Int,
+        standMinutes: Int,
+        periods: [TimeRange],
+        activeDays: [Bool],
+        extraReminders: [TimedReminder]
+    ) {
         self.isEnabled = isEnabled
         self.intervalMinutes = intervalMinutes
         self.standMinutes = standMinutes
         self.periods = periods
-        self.activeDays = activeDays
+        self.activeDays = activeDays.count == 7 ? activeDays : ReminderSettings.default.activeDays
+        self.extraReminders = extraReminders
     }
 
     init(from decoder: Decoder) throws {
@@ -50,9 +105,11 @@ struct ReminderSettings: Codable, Equatable {
         standMinutes = try container.decode(Int.self, forKey: .standMinutes)
         periods = try container.decode([TimeRange].self, forKey: .periods)
         activeDays = try container.decodeIfPresent([Bool].self, forKey: .activeDays)
-            ?? [true, true, true, true, true, false, false]
+            ?? ReminderSettings.default.activeDays
         if activeDays.count != 7 {
-            activeDays = [true, true, true, true, true, false, false]
+            activeDays = ReminderSettings.default.activeDays
         }
+        extraReminders = try container.decodeIfPresent([TimedReminder].self, forKey: .extraReminders)
+            ?? ReminderSettings.defaultExtraReminders
     }
 }

@@ -1,11 +1,9 @@
-import AppIntents
 import SwiftUI
-import UserNotifications
 import WidgetKit
 
 private let appGroupID = "group.com.haotingyi.standupreminder"
 private let settingsKey = "standup.settings.v1"
-private let identifierPrefix = "standup-reminder-"
+private let defaultActiveDays = [true, true, true, true, true, false, false]
 
 private struct SharedTimeRange: Codable, Sendable {
     var startMinutes: Int
@@ -16,23 +14,105 @@ private struct SharedTimeRange: Codable, Sendable {
     }
 }
 
+private struct SharedTimedReminder: Codable, Sendable {
+    var id: UUID
+    var title: String
+    var timeMinutes: Int
+    var activeDays: [Bool]
+    var isEnabled: Bool
+
+    init(id: UUID = UUID(), title: String, timeMinutes: Int, activeDays: [Bool] = defaultActiveDays, isEnabled: Bool = true) {
+        self.id = id
+        self.title = title
+        self.timeMinutes = timeMinutes
+        self.activeDays = activeDays.count == 7 ? activeDays : defaultActiveDays
+        self.isEnabled = isEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case timeMinutes
+        case activeDays
+        case isEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        timeMinutes = try container.decode(Int.self, forKey: .timeMinutes)
+        activeDays = try container.decodeIfPresent([Bool].self, forKey: .activeDays) ?? defaultActiveDays
+        if activeDays.count != 7 {
+            activeDays = defaultActiveDays
+        }
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+    }
+}
+
 private struct SharedReminderSettings: Codable, Sendable {
     var isEnabled: Bool
     var intervalMinutes: Int
     var standMinutes: Int
     var periods: [SharedTimeRange]
     var activeDays: [Bool]
+    var extraReminders: [SharedTimedReminder]
+
+    static let defaultExtraReminders: [SharedTimedReminder] = [
+        SharedTimedReminder(title: "Study Time", timeMinutes: 16 * 60),
+        SharedTimedReminder(title: "Dinner Time", timeMinutes: 17 * 60),
+        SharedTimedReminder(title: "Study Time", timeMinutes: 20 * 60)
+    ]
 
     static let `default` = SharedReminderSettings(
-        isEnabled: false,
+        isEnabled: true,
         intervalMinutes: 45,
         standMinutes: 15,
         periods: [
             SharedTimeRange(startMinutes: 13 * 60, endMinutes: 17 * 60),
             SharedTimeRange(startMinutes: 19 * 60, endMinutes: 21 * 60)
         ],
-        activeDays: [true, true, true, true, true, false, false]
+        activeDays: defaultActiveDays,
+        extraReminders: defaultExtraReminders
     )
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case intervalMinutes
+        case standMinutes
+        case periods
+        case activeDays
+        case extraReminders
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        intervalMinutes = try container.decode(Int.self, forKey: .intervalMinutes)
+        standMinutes = try container.decode(Int.self, forKey: .standMinutes)
+        periods = try container.decode([SharedTimeRange].self, forKey: .periods)
+        activeDays = try container.decodeIfPresent([Bool].self, forKey: .activeDays) ?? defaultActiveDays
+        if activeDays.count != 7 {
+            activeDays = defaultActiveDays
+        }
+        extraReminders = try container.decodeIfPresent([SharedTimedReminder].self, forKey: .extraReminders) ?? Self.defaultExtraReminders
+    }
+
+    init(
+        isEnabled: Bool,
+        intervalMinutes: Int,
+        standMinutes: Int,
+        periods: [SharedTimeRange],
+        activeDays: [Bool],
+        extraReminders: [SharedTimedReminder]
+    ) {
+        self.isEnabled = isEnabled
+        self.intervalMinutes = intervalMinutes
+        self.standMinutes = standMinutes
+        self.periods = periods
+        self.activeDays = activeDays
+        self.extraReminders = extraReminders
+    }
 }
 
 private enum SharedSettingsStore {
@@ -45,137 +125,39 @@ private enum SharedSettingsStore {
               let decoded = try? JSONDecoder().decode(SharedReminderSettings.self, from: data) else {
             return .default
         }
-
-        if decoded.activeDays.count == 7 {
-            return decoded
-        }
-
-        var fixed = decoded
-        fixed.activeDays = SharedReminderSettings.default.activeDays
-        return fixed
-    }
-
-    static func save(_ settings: SharedReminderSettings) {
-        if let data = try? JSONEncoder().encode(settings) {
-            defaults.set(data, forKey: settingsKey)
-        }
+        return decoded
     }
 }
 
-private enum WidgetNotificationScheduler {
-    static func clearAll() async {
-        let center = UNUserNotificationCenter.current()
-        await withCheckedContinuation { continuation in
-            center.getPendingNotificationRequests { requests in
-                let ids = requests.map(\.identifier).filter { $0.hasPrefix(identifierPrefix) }
-                center.removePendingNotificationRequests(withIdentifiers: ids)
-                continuation.resume()
-            }
-        }
-    }
+struct StandProgress {
+    let done: Int
+    let total: Int
 
-    static func apply(settings: SharedReminderSettings) async {
-        await clearAll()
-        guard settings.isEnabled else { return }
-
-        let center = UNUserNotificationCenter.current()
-        let schedule = buildWeekdaySchedule(settings: settings)
-        guard !schedule.isEmpty else { return }
-
-        for (index, item) in schedule.enumerated() {
-            let content = UNMutableNotificationContent()
-            content.title = "Stand Up Reminder"
-            content.body = "Stand up now and take a \(settings.standMinutes)-minute break."
-            content.subtitle = "Healthy Break"
-            content.threadIdentifier = "standup-reminders"
-            content.categoryIdentifier = "standup.category"
-            content.sound = .default
-
-            var components = DateComponents()
-            components.weekday = item.weekday
-            components.hour = item.hour
-            components.minute = item.minute
-
-            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-            let identifier = "\(identifierPrefix)\(index)-w\(item.weekday)-\(item.hour)-\(item.minute)"
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-
-            await withCheckedContinuation { continuation in
-                center.add(request) { _ in
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
-    private static func buildWeekdaySchedule(settings: SharedReminderSettings) -> [(weekday: Int, hour: Int, minute: Int)] {
-        let weekdayMap = [2, 3, 4, 5, 6, 7, 1]
-        let weekdays = weekdayMap.enumerated().compactMap { index, weekday -> Int? in
-            guard settings.activeDays.indices.contains(index), settings.activeDays[index] else { return nil }
-            return weekday
-        }
-
-        let interval = max(settings.intervalMinutes, 1)
-        var daySlots: [(hour: Int, minute: Int)] = []
-
-        for period in settings.periods where period.isValid {
-            var cursor = period.startMinutes
-            while cursor <= period.endMinutes {
-                daySlots.append((hour: cursor / 60, minute: cursor % 60))
-                cursor += interval
-            }
-        }
-
-        let uniqueSlots = Dictionary(grouping: daySlots, by: { "\($0.hour):\($0.minute)" })
-            .compactMap { $0.value.first }
-            .sorted { lhs, rhs in (lhs.hour, lhs.minute) < (rhs.hour, rhs.minute) }
-
-        var output: [(weekday: Int, hour: Int, minute: Int)] = []
-        for weekday in weekdays {
-            for slot in uniqueSlots {
-                output.append((weekday: weekday, hour: slot.hour, minute: slot.minute))
-            }
-        }
-        return output
-    }
-}
-
-struct ToggleReminderIntent: AppIntent {
-    static var title: LocalizedStringResource { "Toggle StandUp Reminder" }
-    static var openAppWhenRun: Bool { false }
-
-    func perform() async throws -> some IntentResult {
-        var settings = SharedSettingsStore.load()
-        settings.isEnabled.toggle()
-        SharedSettingsStore.save(settings)
-
-        WidgetCenter.shared.reloadAllTimelines()
-
-        Task(priority: .utility) {
-            if settings.isEnabled {
-                await WidgetNotificationScheduler.apply(settings: settings)
-            } else {
-                await WidgetNotificationScheduler.clearAll()
-            }
-            WidgetCenter.shared.reloadAllTimelines()
-        }
-
-        return .result()
+    var ratio: Double {
+        guard total > 0 else { return 0 }
+        return Double(done) / Double(total)
     }
 }
 
 struct StandUpReminderEntry: TimelineEntry {
     let date: Date
-    let isEnabled: Bool
-    let minutesLeft: Int?
-    let mode: String
-    let done: Int
-    let total: Int
+    let inWorkWindow: Bool
+    let nextStandMinutes: Int?
+    let modeText: String
+    let progress: StandProgress
+    let todayItems: [String]
 }
 
 struct StandUpReminderProvider: TimelineProvider {
     func placeholder(in context: Context) -> StandUpReminderEntry {
-        StandUpReminderEntry(date: .now, isEnabled: true, minutesLeft: 32, mode: "Sit & Focus", done: 2, total: 5)
+        StandUpReminderEntry(
+            date: .now,
+            inWorkWindow: true,
+            nextStandMinutes: 18,
+            modeText: "Work window",
+            progress: StandProgress(done: 2, total: 5),
+            todayItems: ["Study Time · 16:00", "Dinner Time · 17:00"]
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (StandUpReminderEntry) -> Void) {
@@ -190,69 +172,79 @@ struct StandUpReminderProvider: TimelineProvider {
 
     private func buildEntry(for date: Date) -> StandUpReminderEntry {
         let settings = SharedSettingsStore.load()
-        let progress = progressSnapshot(for: date, settings: settings)
+        let inWindow = isInActiveWindow(date, settings: settings)
+
+        let modeText = inWindow
+            ? "Work window"
+            : "Off work hours. No extra pay, handle your own plans."
 
         return StandUpReminderEntry(
             date: date,
-            isEnabled: settings.isEnabled,
-            minutesLeft: minutesUntilNextReminder(from: date, settings: settings),
-            mode: modeText(for: date, settings: settings),
-            done: progress.done,
-            total: progress.total
+            inWorkWindow: inWindow,
+            nextStandMinutes: inWindow ? minutesUntilNextStandInCurrentWindow(from: date, settings: settings) : nil,
+            modeText: modeText,
+            progress: progressSnapshot(for: date, settings: settings),
+            todayItems: todayItems(for: date, settings: settings)
         )
     }
 
-    private func modeText(for date: Date, settings: SharedReminderSettings) -> String {
-        guard settings.isEnabled else { return "Reminders Off" }
-        return isInActiveWindow(date, settings: settings) ? "Next stand-up reminder" : "Until active period"
-    }
-
-    private func progressSnapshot(for date: Date, settings: SharedReminderSettings) -> (done: Int, total: Int) {
-        let slots = dailyReminderSlots(settings: settings)
-        guard !slots.isEmpty else { return (0, 0) }
+    private func progressSnapshot(for date: Date, settings: SharedReminderSettings) -> StandProgress {
+        let slots = dailyStandSlots(settings: settings)
+        guard !slots.isEmpty else { return StandProgress(done: 0, total: 0) }
 
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date)
         let mondayIndex = (weekday + 5) % 7
         guard settings.activeDays.indices.contains(mondayIndex), settings.activeDays[mondayIndex] else {
-            return (0, slots.count)
+            return StandProgress(done: 0, total: slots.count)
         }
 
         let nowMinute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
         let done = slots.filter { $0 <= nowMinute }.count
-        return (done, slots.count)
+        return StandProgress(done: done, total: slots.count)
     }
 
-    private func minutesUntilNextReminder(from date: Date, settings: SharedReminderSettings) -> Int? {
-        guard settings.isEnabled, settings.intervalMinutes > 0 else { return nil }
-
+    private func todayItems(for date: Date, settings: SharedReminderSettings) -> [String] {
         let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: date)
-        let slots = dailyReminderSlots(settings: settings)
+        let weekday = calendar.component(.weekday, from: date)
+        let mondayIndex = (weekday + 5) % 7
+
+        return settings.extraReminders
+            .filter { reminder in
+                reminder.isEnabled &&
+                    reminder.activeDays.indices.contains(mondayIndex) &&
+                    reminder.activeDays[mondayIndex]
+            }
+            .sorted { $0.timeMinutes < $1.timeMinutes }
+            .map { "\($0.title) · \(formatMinutes($0.timeMinutes))" }
+    }
+
+    private func minutesUntilNextStandInCurrentWindow(from date: Date, settings: SharedReminderSettings) -> Int? {
+        let calendar = Calendar.current
+        let nowMinute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
+
+        guard let currentPeriod = settings.periods.first(where: { period in
+            period.isValid && nowMinute >= period.startMinutes && nowMinute <= period.endMinutes
+        }) else {
+            return nil
+        }
+
+        let slots = dailyStandSlots(settings: settings)
         guard !slots.isEmpty else { return nil }
 
-        for offset in 0...13 {
-            guard let targetDay = calendar.date(byAdding: .day, value: offset, to: dayStart) else { continue }
-            let weekday = calendar.component(.weekday, from: targetDay)
-            let mondayIndex = (weekday + 5) % 7
-            guard settings.activeDays.indices.contains(mondayIndex), settings.activeDays[mondayIndex] else { continue }
-
-            for minute in slots {
-                let hour = minute / 60
-                let min = minute % 60
-                guard let reminderDate = calendar.date(bySettingHour: hour, minute: min, second: 0, of: targetDay) else {
-                    continue
-                }
-                if reminderDate > date {
-                    return max(Int(ceil(reminderDate.timeIntervalSince(date) / 60.0)), 1)
-                }
+        for slot in slots where slot > nowMinute && slot <= currentPeriod.endMinutes {
+            let hour = slot / 60
+            let min = slot % 60
+            guard let reminderDate = calendar.date(bySettingHour: hour, minute: min, second: 0, of: date) else {
+                continue
             }
+            return max(Int(ceil(reminderDate.timeIntervalSince(date) / 60.0)), 1)
         }
 
         return nil
     }
 
-    private func dailyReminderSlots(settings: SharedReminderSettings) -> [Int] {
+    private func dailyStandSlots(settings: SharedReminderSettings) -> [Int] {
         var slots: Set<Int> = []
         let interval = max(settings.intervalMinutes, 1)
 
@@ -276,20 +268,17 @@ struct StandUpReminderProvider: TimelineProvider {
         let minute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
         return settings.periods.contains { $0.isValid && minute >= $0.startMinutes && minute <= $0.endMinutes }
     }
+
+    private func formatMinutes(_ minutes: Int) -> String {
+        let hour = max(0, min(23, minutes / 60))
+        let min = max(0, min(59, minutes % 60))
+        return String(format: "%02d:%02d", hour, min)
+    }
 }
 
 struct StandUpReminderWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     var entry: StandUpReminderProvider.Entry
-
-    private var countdownText: String {
-        entry.minutesLeft.map { "\($0) min" } ?? "--"
-    }
-
-    private var progressValue: Double {
-        guard entry.total > 0 else { return 0 }
-        return Double(entry.done) / Double(entry.total)
-    }
 
     var body: some View {
         if family == .systemMedium {
@@ -300,59 +289,85 @@ struct StandUpReminderWidgetEntryView: View {
     }
 
     private var smallView: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 logo
-                    .frame(width: 42, height: 42)
+                    .frame(width: 40, height: 40)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(countdownText)
-                        .font(.headline)
-                    Text(entry.mode)
-                        .font(.caption)
+                    if !entry.inWorkWindow {
+                        Text("Off Hours")
+                            .font(.headline)
+                    } else if let minutes = entry.nextStandMinutes {
+                        Text("Next stand: \(minutes) min")
+                            .font(.headline)
+                    } else {
+                        Text("No More Stand Reminders")
+                            .font(.headline)
+                    }
+                    Text(entry.modeText)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
 
-            ProgressView(value: progressValue)
-                .progressViewStyle(.linear)
-
-            Text("Today: \(entry.done)/\(entry.total)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            toggleButton
+            if entry.inWorkWindow, let firstItem = entry.todayItems.first {
+                Text("Today: \(firstItem)")
+                    .font(.caption2)
+                    .lineLimit(1)
+            } else if entry.inWorkWindow {
+                Text("Today: No extra items")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(12)
     }
 
     private var mediumView: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             logo
-                .frame(width: 74, height: 74)
+                .frame(width: 72, height: 72)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(countdownText)
-                    .font(.title2.weight(.semibold))
-                Text(entry.mode)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("Today: \(entry.done)/\(entry.total)")
+                if !entry.inWorkWindow {
+                    Text("Off work hours")
+                        .font(.title3.weight(.semibold))
+                } else if let minutes = entry.nextStandMinutes {
+                    Text("Next stand in \(minutes) min")
+                        .font(.title3.weight(.semibold))
+                } else {
+                    Text("No more stand reminders this window")
+                        .font(.title3.weight(.semibold))
+                }
+
+                Text(entry.modeText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
+                    .lineLimit(2)
 
-            Spacer(minLength: 10)
+                if entry.inWorkWindow {
+                    ProgressView(value: entry.progress.ratio)
+                        .progressViewStyle(.linear)
 
-            VStack(alignment: .trailing, spacing: 10) {
-                ProgressView(value: progressValue)
-                    .progressViewStyle(.linear)
-                    .frame(width: 130)
-                toggleButton
+                    Text("Stand progress: \(entry.progress.done)/\(entry.progress.total)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    if entry.todayItems.isEmpty {
+                        Text("No extra items today")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Today: \(entry.todayItems.prefix(2).joined(separator: "  |  "))")
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                }
             }
         }
-        .padding(14)
+        .padding(12)
     }
 
     private var logo: some View {
@@ -360,15 +375,6 @@ struct StandUpReminderWidgetEntryView: View {
             .resizable()
             .scaledToFill()
             .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var toggleButton: some View {
-        Button(intent: ToggleReminderIntent()) {
-            Label(entry.isEnabled ? "Turn Off" : "Turn On", systemImage: entry.isEnabled ? "pause.fill" : "play.fill")
-                .labelStyle(.titleAndIcon)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(entry.isEnabled ? .red : .accentColor)
     }
 }
 
@@ -381,7 +387,7 @@ struct StandUpReminderWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("StandUpReminder")
-        .description("Turn reminders on or off and view countdown.")
+        .description("Shows today's items and next stand-up time during work windows.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

@@ -4,7 +4,16 @@ import Foundation
 final class ReminderScheduler: @unchecked Sendable {
     private let center = UNUserNotificationCenter.current()
     private let identifierPrefix = "standup-reminder-"
-    private let calendar = Calendar.current
+
+    private struct NotificationPlan {
+        let identifier: String
+        let title: String
+        let body: String
+        let threadIdentifier: String
+        let weekday: Int
+        let hour: Int
+        let minute: Int
+    }
 
     private final class FailureCounter: @unchecked Sendable {
         private var value = 0
@@ -54,40 +63,38 @@ final class ReminderScheduler: @unchecked Sendable {
                 return
             }
 
-            let schedule = self.buildWeekdaySchedule(settings: settings)
-            guard !schedule.isEmpty else {
-                completion("No reminders scheduled. Check period settings.")
+            let plans = self.buildWeeklyNotificationPlans(settings: settings)
+            guard !plans.isEmpty else {
+                completion("No reminders scheduled. Check periods or custom reminders.")
                 return
             }
 
-            if schedule.count > 64 {
-                completion("Too many reminders (\(schedule.count)). Reduce periods or increase interval.")
+            if plans.count > 256 {
+                completion("Too many reminders (\(plans.count)). Reduce periods or custom reminders.")
                 return
             }
 
             let group = DispatchGroup()
             let counter = FailureCounter()
 
-            for (index, item) in schedule.enumerated() {
+            for plan in plans {
                 let content = UNMutableNotificationContent()
-                content.title = "Stand Up Reminder"
-                content.body = "Stand up now and take a \(settings.standMinutes)-minute break."
-                content.subtitle = "Healthy Break"
-                content.threadIdentifier = "standup-reminders"
+                content.title = plan.title
+                content.body = plan.body
+                content.threadIdentifier = plan.threadIdentifier
                 content.categoryIdentifier = "standup.category"
                 content.sound = .default
 
                 var components = DateComponents()
-                components.weekday = item.weekday
-                components.hour = item.hour
-                components.minute = item.minute
+                components.weekday = plan.weekday
+                components.hour = plan.hour
+                components.minute = plan.minute
 
                 let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-                let identifier = "\(identifierPrefix)\(index)-w\(item.weekday)-\(item.hour)-\(item.minute)"
-                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                let request = UNNotificationRequest(identifier: plan.identifier, content: content, trigger: trigger)
 
                 group.enter()
-                self.center.add(request) { error in
+                center.add(request) { error in
                     if error != nil {
                         counter.increment()
                     }
@@ -98,46 +105,91 @@ final class ReminderScheduler: @unchecked Sendable {
             group.notify(queue: .main) {
                 let failures = counter.current()
                 if failures == 0 {
-                    completion("Scheduled \(schedule.count) weekly reminders.")
+                    completion("Scheduled \(plans.count) weekly reminders.")
                 } else {
-                    completion("Scheduled \(schedule.count - failures)/\(schedule.count) reminders.")
+                    completion("Scheduled \(plans.count - failures)/\(plans.count) reminders.")
                 }
             }
         }
     }
 
-    private func buildWeekdaySchedule(settings: ReminderSettings) -> [(weekday: Int, hour: Int, minute: Int)] {
+    private func buildWeeklyNotificationPlans(settings: ReminderSettings) -> [NotificationPlan] {
+        var plans: [NotificationPlan] = []
+        let standSlots = dailyStandSlots(settings: settings)
+
         // App day index 0...6 is Mon...Sun mapped to Calendar weekday values.
         let weekdayMap = [2, 3, 4, 5, 6, 7, 1]
-        let weekdays = weekdayMap.enumerated().compactMap { index, weekday -> Int? in
-            guard settings.activeDays.indices.contains(index), settings.activeDays[index] else {
-                return nil
+
+        for (dayIndex, weekday) in weekdayMap.enumerated() {
+            guard settings.activeDays.indices.contains(dayIndex), settings.activeDays[dayIndex] else { continue }
+
+            for (slotIndex, minute) in standSlots.enumerated() {
+                let hour = minute / 60
+                let min = minute % 60
+                plans.append(
+                    NotificationPlan(
+                        identifier: "\(identifierPrefix)stand-\(dayIndex)-\(slotIndex)-\(hour)-\(min)",
+                        title: "Stand Up Reminder",
+                        body: "Time to stand up and take a \(settings.standMinutes)-minute break.",
+                        threadIdentifier: "standup-reminders",
+                        weekday: weekday,
+                        hour: hour,
+                        minute: min
+                    )
+                )
             }
-            return weekday
         }
-        var daySlots: [(hour: Int, minute: Int)] = []
+
+        for (reminderIndex, reminder) in settings.extraReminders.enumerated() where reminder.isEnabled {
+            let trimmedTitle = reminder.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedTitle.isEmpty else { continue }
+            let reminderDays = reminder.activeDays.count == 7 ? reminder.activeDays : ReminderSettings.default.activeDays
+
+            for (dayIndex, weekday) in weekdayMap.enumerated() {
+                guard reminderDays[dayIndex] else { continue }
+                let hour = max(0, min(23, reminder.timeMinutes / 60))
+                let minute = max(0, min(59, reminder.timeMinutes % 60))
+
+                plans.append(
+                    NotificationPlan(
+                        identifier: "\(identifierPrefix)custom-\(reminderIndex)-\(dayIndex)-\(hour)-\(minute)",
+                        title: trimmedTitle,
+                        body: customReminderBody(for: trimmedTitle),
+                        threadIdentifier: "custom-reminders",
+                        weekday: weekday,
+                        hour: hour,
+                        minute: minute
+                    )
+                )
+            }
+        }
+
+        return plans
+    }
+
+    private func dailyStandSlots(settings: ReminderSettings) -> [Int] {
+        var slots: Set<Int> = []
+        let interval = max(settings.intervalMinutes, 1)
 
         for period in settings.periods where period.isValid {
             var cursor = period.startMinutes
             while cursor <= period.endMinutes {
-                daySlots.append((hour: cursor / 60, minute: cursor % 60))
-                cursor += settings.intervalMinutes
+                slots.insert(cursor)
+                cursor += interval
             }
         }
 
-        let uniqueSlots = Dictionary(grouping: daySlots, by: { "\($0.hour):\($0.minute)" })
-            .compactMap { $0.value.first }
-            .sorted { lhs, rhs in
-                (lhs.hour, lhs.minute) < (rhs.hour, rhs.minute)
-            }
+        return slots.sorted()
+    }
 
-        var output: [(weekday: Int, hour: Int, minute: Int)] = []
-        for weekday in weekdays {
-            for slot in uniqueSlots {
-                output.append((weekday: weekday, hour: slot.hour, minute: slot.minute))
-            }
+    private func customReminderBody(for title: String) -> String {
+        if title.localizedCaseInsensitiveContains("dinner") {
+            return "Dinner time. Refuel and recharge."
         }
-        return output
+        if title.localizedCaseInsensitiveContains("study") {
+            return "Study time. Stay focused."
+        }
+        return "It is time for \(title)."
     }
 
     static func minutesToDate(_ minutes: Int) -> Date {
@@ -155,10 +207,12 @@ final class ReminderScheduler: @unchecked Sendable {
     }
 
     static func formatRange(_ range: TimeRange) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        let start = formatter.string(from: minutesToDate(range.startMinutes))
-        let end = formatter.string(from: minutesToDate(range.endMinutes))
-        return "\(start)-\(end)"
+        "\(formatMinutes(range.startMinutes)) - \(formatMinutes(range.endMinutes))"
+    }
+
+    static func formatMinutes(_ minutes: Int) -> String {
+        let hour = max(0, min(23, minutes / 60))
+        let min = max(0, min(59, minutes % 60))
+        return String(format: "%02d:%02d", hour, min)
     }
 }
