@@ -11,6 +11,7 @@
 		1C9412A6AB68E3A62895EC29 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
 		317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */; };
 		4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */; };
+		5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD68F48786509C349657A3BC /* AssistantModels.swift */; };
 		5EBF201A4258A70F3473A5D7 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
 		7428F3DE3EEDEBC881F6C459 /* StandUpReminderWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */; };
 		8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */; };
@@ -52,6 +53,7 @@
 		BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSettings.swift; sourceTree = "<group>"; };
 		CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderViewModel.swift; sourceTree = "<group>"; };
 		F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = logo_chibi.png; sourceTree = "<group>"; };
+		FD68F48786509C349657A3BC /* AssistantModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -94,6 +96,7 @@
 		C6773DDAB80C1F06E3229983 /* StandUpReminder */ = {
 			isa = PBXGroup;
 			children = (
+				FD68F48786509C349657A3BC /* AssistantModels.swift */,
 				8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */,
 				53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */,
 				BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */,
@@ -198,6 +201,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */,
 				317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */,
 				8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */,
 				4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */,

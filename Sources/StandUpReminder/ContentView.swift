@@ -1,25 +1,46 @@
 import SwiftUI
 
 private enum AppSection: String, CaseIterable, Hashable {
-    case home
-    case insights
+    case today
+    case todo
+    case reminders
+    case shopping
+    case calendar
+    case weather
     case preferences
 
     var title: String {
         switch self {
-        case .home: return "Home"
-        case .insights: return "Insights"
+        case .today: return "Today"
+        case .todo: return "Todo"
+        case .reminders: return "Reminders"
+        case .shopping: return "Shopping"
+        case .calendar: return "Calendar"
+        case .weather: return "Weather"
         case .preferences: return "Preferences"
         }
     }
 
     var icon: String {
         switch self {
-        case .home: return "house"
-        case .insights: return "chart.bar"
+        case .today: return "sun.max"
+        case .todo: return "checklist"
+        case .reminders: return "bell"
+        case .shopping: return "cart"
+        case .calendar: return "calendar"
+        case .weather: return "cloud.sun"
         case .preferences: return "gearshape"
         }
     }
+}
+
+private enum ListSortMode: String, CaseIterable, Identifiable {
+    case pendingFirst = "Pending First"
+    case alphabetical = "A-Z"
+    case newestFirst = "Newest"
+    case manual = "Manual"
+
+    var id: String { rawValue }
 }
 
 private struct TimerSnapshot {
@@ -89,7 +110,7 @@ private struct ExtraReminderDraft: Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var viewModel: ReminderViewModel
 
-    @State private var selection: AppSection? = .home
+    @State private var selection: AppSection? = .today
     @State private var periods: [PeriodDraft] = [
         PeriodDraft(range: .afternoon),
         PeriodDraft(range: .evening)
@@ -98,6 +119,11 @@ struct ContentView: View {
     @State private var intervalMinutes = 45
     @State private var standMinutes = 15
     @State private var activeDays: [Bool] = [true, true, true, true, true, false, false]
+    @State private var newTodoTitle = ""
+    @State private var newShoppingTitle = ""
+    @State private var todoSortMode: ListSortMode = .pendingFirst
+    @State private var shoppingSortMode: ListSortMode = .pendingFirst
+    @State private var calendarSelection = Date()
 
     private let timeOptions = Array(stride(from: 0, through: 23 * 60 + 30, by: 30))
     private let daySymbols = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -116,8 +142,16 @@ struct ContentView: View {
         )
     }
 
-    private var hasUnsavedChanges: Bool {
+    private var hasUnsavedReminderChanges: Bool {
         draftSettings != viewModel.settings
+    }
+
+    private var sortedTodos: [AssistantItem] {
+        sorted(items: viewModel.todoItems, mode: todoSortMode)
+    }
+
+    private var sortedShoppingItems: [AssistantItem] {
+        sorted(items: viewModel.shoppingItems, mode: shoppingSortMode)
     }
 
     var body: some View {
@@ -136,118 +170,182 @@ struct ContentView: View {
                     .tag(section)
             }
         }
-        .navigationTitle("StandUpReminder")
-        .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 260)
+        .navigationTitle("Assistant Hub")
+        .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
     }
 
     @ViewBuilder
     private var detail: some View {
-        switch selection ?? .home {
-        case .home:
-            homeView
-        case .insights:
-            insightsView
+        switch selection ?? .today {
+        case .today:
+            todayView
+        case .todo:
+            todoView
+        case .reminders:
+            remindersView
+        case .shopping:
+            shoppingView
+        case .calendar:
+            calendarView
+        case .weather:
+            weatherView
         case .preferences:
             preferencesView
         }
     }
 
-    private var homeView: some View {
+    private var todayView: some View {
         ScrollView {
-            VStack(spacing: 18) {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    let timer = timerSnapshot(for: context.date)
-                    let progress = progressSnapshot(for: context.date)
-                    let todayItems = todayItemLines(for: context.date)
-                    let inWorkWindow = timer.headline != nil
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                let timer = timerSnapshot(for: context.date)
+                let progress = progressSnapshot(for: context.date)
+                let reminderItems = todayItemLines(for: context.date)
+                let todoPreview = sorted(items: viewModel.todoItems.filter { !$0.isCompleted }, mode: .pendingFirst)
+                let shoppingPreview = sorted(items: viewModel.shoppingItems.filter { !$0.isCompleted }, mode: .pendingFirst)
+                let inWorkWindow = timer.headline != nil
 
-                    VStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 14) {
                         Image("logo_chibi")
                             .resizable()
                             .scaledToFit()
-                            .frame(maxWidth: 180)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                        if let headline = timer.headline {
-                            Text(headline)
-                                .font(.system(size: 42, weight: .bold, design: .rounded))
-                        }
-                        Text(timer.subtitle)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-
-                        if inWorkWindow {
-                            ProgressView(value: progress.fraction)
-                                .progressViewStyle(.linear)
-                                .frame(maxWidth: 360)
-
-                            Text("Today's stand reminders: \(progress.done)/\(progress.total)")
-                                .font(.subheadline)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Today's Command Center")
+                                .font(.title2.weight(.semibold))
+                            Text("One place for tasks, reminders, and lists.")
                                 .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Today's Items")
-                                    .font(.headline)
-                                if todayItems.isEmpty {
-                                    Text("No extra items today.")
-                                        .font(.callout)
+                        }
+                    }
+
+                    GroupBox("Stand-up Status") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let headline = timer.headline {
+                                Text(headline)
+                                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                            }
+                            Text(timer.subtitle)
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+
+                            if inWorkWindow {
+                                ProgressView(value: progress.fraction)
+                                    .progressViewStyle(.linear)
+                                Text("Today's stand reminders: \(progress.done)/\(progress.total)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    GroupBox("Today's Reminder Items") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if inWorkWindow {
+                                if reminderItems.isEmpty {
+                                    Text("No extra reminder items today.")
                                         .foregroundStyle(.secondary)
                                 } else {
-                                    ForEach(todayItems.prefix(4), id: \.self) { item in
+                                    ForEach(reminderItems.prefix(6), id: \.self) { item in
                                         Text("• \(item)")
-                                            .font(.callout)
                                     }
                                 }
+                            } else {
+                                Text("Off work hours. No extra pay, handle your own plans.")
+                                    .foregroundStyle(.secondary)
                             }
-                            .frame(maxWidth: 360, alignment: .leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 16) {
+                            dashboardListCard(
+                                title: "Pending Todo",
+                                subtitle: "\(viewModel.pendingTodoCount) remaining",
+                                items: todoPreview
+                            )
+                            dashboardListCard(
+                                title: "Shopping Queue",
+                                subtitle: "\(viewModel.pendingShoppingCount) remaining",
+                                items: shoppingPreview
+                            )
+                        }
+
+                        VStack(alignment: .leading, spacing: 16) {
+                            dashboardListCard(
+                                title: "Pending Todo",
+                                subtitle: "\(viewModel.pendingTodoCount) remaining",
+                                items: todoPreview
+                            )
+                            dashboardListCard(
+                                title: "Shopping Queue",
+                                subtitle: "\(viewModel.pendingShoppingCount) remaining",
+                                items: shoppingPreview
+                            )
                         }
                     }
-                    .frame(maxWidth: .infinity)
                 }
-
-                Text(viewModel.statusMessage)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity)
         }
-        .navigationTitle("Home")
+        .navigationTitle("Today")
     }
 
-    private var insightsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    let progress = progressSnapshot(for: context.date)
+    private var todoView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                TextField("Add todo item", text: $newTodoTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addTodo)
+                Button("Add", action: addTodo)
+                    .keyboardShortcut(.return)
+            }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        insightRow("Status", value: "Active")
-                        insightRow("Interval", value: "\(viewModel.settings.intervalMinutes) min")
-                        insightRow("Break Length", value: "\(viewModel.settings.standMinutes) min")
-                        insightRow("Today", value: "\(progress.done)/\(progress.total)")
-                        insightRow("Custom Items", value: "\(viewModel.settings.extraReminders.filter { $0.isEnabled }.count)")
+            HStack {
+                Picker("Sort", selection: $todoSortMode) {
+                    ForEach(ListSortMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
-
-                Divider()
-
-                Text("Configured Schedule")
-                    .font(.headline)
-                Text(viewModel.periodSummary())
-                    .foregroundStyle(.secondary)
+                .pickerStyle(.segmented)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
+
+            List {
+                if todoSortMode == .manual {
+                    ForEach(viewModel.todosByManualOrder) { item in
+                        todoRow(item)
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { viewModel.todosByManualOrder[$0].id }
+                        viewModel.removeTodos(ids: ids)
+                    }
+                    .onMove(perform: viewModel.moveTodos)
+                } else {
+                    ForEach(sortedTodos) { item in
+                        todoRow(item)
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { sortedTodos[$0].id }
+                        viewModel.removeTodos(ids: ids)
+                    }
+                }
+            }
+            .listStyle(.inset)
         }
-        .navigationTitle("Insights")
+        .padding(24)
+        .navigationTitle("Todo")
     }
 
-    private var preferencesView: some View {
+    private var remindersView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Stand-up")
                     .font(.title.weight(.bold))
+
                 GroupBox {
                     VStack(alignment: .leading, spacing: 14) {
                         ForEach(Array(periods.indices), id: \.self) { idx in
@@ -316,12 +414,12 @@ struct ContentView: View {
 
                 Text("Reminder Items")
                     .font(.title.weight(.bold))
+
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(Array(extraReminders.indices), id: \.self) { idx in
                             VStack(alignment: .leading, spacing: 8) {
                                 Toggle("Enable", isOn: $extraReminders[idx].isEnabled)
-
                                 TextField("Title", text: $extraReminders[idx].title)
 
                                 LabeledTimePicker(
@@ -358,26 +456,343 @@ struct ContentView: View {
                     .padding(.top, 4)
                 }
 
-                HStack {
-                    Spacer()
-                    Image("logo_chibi")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-
-                Button("Save Settings") {
-                    saveToModel()
+                Button("Save Reminder Settings") {
+                    saveReminderSettings()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(!hasUnsavedChanges)
+                .disabled(!hasUnsavedReminderChanges)
+
+                Text(viewModel.statusMessage)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Reminders")
+    }
+
+    private var shoppingView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                TextField("Add shopping item", text: $newShoppingTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addShoppingItem)
+                Button("Add", action: addShoppingItem)
+                    .keyboardShortcut(.return)
+            }
+
+            HStack {
+                Picker("Sort", selection: $shoppingSortMode) {
+                    ForEach(ListSortMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            List {
+                if shoppingSortMode == .manual {
+                    ForEach(viewModel.shoppingByManualOrder) { item in
+                        shoppingRow(item)
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { viewModel.shoppingByManualOrder[$0].id }
+                        viewModel.removeShoppingItems(ids: ids)
+                    }
+                    .onMove(perform: viewModel.moveShoppingItems)
+                } else {
+                    ForEach(sortedShoppingItems) { item in
+                        shoppingRow(item)
+                    }
+                    .onDelete { offsets in
+                        let ids = offsets.map { sortedShoppingItems[$0].id }
+                        viewModel.removeShoppingItems(ids: ids)
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
+        .padding(24)
+        .navigationTitle("Shopping")
+    }
+
+    private var calendarView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Calendar")
+                    .font(.title2.weight(.semibold))
+
+                DatePicker("Selected Date", selection: $calendarSelection, displayedComponents: [.date])
+                    .datePickerStyle(.graphical)
+
+                GroupBox("Access") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(calendarAccessTitle)
+                            .font(.headline)
+                        Text(viewModel.calendarStatusMessage)
+                            .foregroundStyle(.secondary)
+
+                        HStack {
+                            Button("Refresh Events") {
+                                viewModel.refreshCalendarEvents(for: calendarSelection, requestAccessIfNeeded: false)
+                            }
+
+                            if viewModel.calendarAccessState == .notDetermined {
+                                Button("Grant Calendar Access") {
+                                    viewModel.requestCalendarAccessAndRefresh(for: calendarSelection)
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if viewModel.calendarAccessState == .granted {
+                    GroupBox("Events") {
+                        if viewModel.calendarEvents.isEmpty {
+                            Text("No calendar events on this date.")
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(viewModel.calendarEvents) { event in
+                                    calendarEventRow(event)
+                                    if event.id != viewModel.calendarEvents.last?.id {
+                                        Divider()
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Calendar")
+        .onAppear {
+            viewModel.refreshCalendarEvents(for: calendarSelection, requestAccessIfNeeded: false)
+        }
+        .onChange(of: calendarSelection) { _, newDate in
+            viewModel.refreshCalendarEvents(for: newDate, requestAccessIfNeeded: false)
+        }
+    }
+
+    private var weatherView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Weather")
+                    .font(.title2.weight(.semibold))
+
+                HStack(spacing: 10) {
+                    Image(systemName: "cloud.sun")
+                        .font(.largeTitle)
+                    VStack(alignment: .leading) {
+                        Text("Weather integration is planned for V2.")
+                        Text("Next step: connect WeatherKit and surface current conditions.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("Last updated: \(Date.now.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Weather")
+    }
+
+    private var preferencesView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Preferences")
+                    .font(.title2.weight(.semibold))
+
+                GroupBox("Assistant Overview") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        insightRow("Todo items", value: "\(viewModel.todoItems.count)")
+                        insightRow("Shopping items", value: "\(viewModel.shoppingItems.count)")
+                        insightRow("Reminder items", value: "\(viewModel.settings.extraReminders.filter(\.isEnabled).count)")
+                        insightRow("Stand-up periods", value: "\(viewModel.settings.periods.count)")
+                    }
+                }
+
+                GroupBox("Roadmap") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("V2: Calendar + Weather live integrations.")
+                        Text("V4: Voice input + LLM execution workflow.")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Preferences")
+    }
+
+    private func dashboardListCard(title: String, subtitle: String, items: [AssistantItem]) -> some View {
+        GroupBox(title) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if items.isEmpty {
+                    Text("Nothing pending.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(items.prefix(5)) { item in
+                        Text("• \(item.title)")
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var calendarAccessTitle: String {
+        switch viewModel.calendarAccessState {
+        case .unknown:
+            return "Unknown"
+        case .notDetermined:
+            return "Permission Required"
+        case .granted:
+            return "Connected"
+        case .denied:
+            return "Access Denied"
+        case .restricted:
+            return "Restricted"
+        case .writeOnly:
+            return "Write-Only Access"
+        }
+    }
+
+    private func calendarEventRow(_ event: CalendarEventItem) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(event.title)
+                .font(.headline)
+            Text(event.isAllDay ? "All day · \(event.calendarTitle)" : "\(formatCalendarEventTimeRange(event)) · \(event.calendarTitle)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if let location = event.location, !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(location)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func formatCalendarEventTimeRange(_ event: CalendarEventItem) -> String {
+        let start = event.startDate.formatted(date: .omitted, time: .shortened)
+        let end = event.endDate.formatted(date: .omitted, time: .shortened)
+        return "\(start) - \(end)"
+    }
+
+    private func todoRow(_ item: AssistantItem) -> some View {
+        HStack(spacing: 8) {
+            Toggle("", isOn: todoCompletionBinding(id: item.id))
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+
+            TextField("Task title", text: todoTitleBinding(id: item.id))
+                .textFieldStyle(.plain)
+                .strikethrough(item.isCompleted, color: .secondary)
+                .foregroundStyle(item.isCompleted ? .secondary : .primary)
+        }
+    }
+
+    private func shoppingRow(_ item: AssistantItem) -> some View {
+        HStack(spacing: 8) {
+            Toggle("", isOn: shoppingCompletionBinding(id: item.id))
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+
+            TextField("Shopping item", text: shoppingTitleBinding(id: item.id))
+                .textFieldStyle(.plain)
+                .strikethrough(item.isCompleted, color: .secondary)
+                .foregroundStyle(item.isCompleted ? .secondary : .primary)
+        }
+    }
+
+    private func sorted(items: [AssistantItem], mode: ListSortMode) -> [AssistantItem] {
+        switch mode {
+        case .pendingFirst:
+            return items.sorted { lhs, rhs in
+                if lhs.isCompleted != rhs.isCompleted {
+                    return lhs.isCompleted == false
+                }
+                return lhs.sortOrder < rhs.sortOrder
+            }
+        case .alphabetical:
+            return items.sorted { lhs, rhs in
+                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        case .newestFirst:
+            return items.sorted { lhs, rhs in
+                lhs.createdAt > rhs.createdAt
+            }
+        case .manual:
+            return items.sorted { lhs, rhs in
+                lhs.sortOrder < rhs.sortOrder
+            }
+        }
+    }
+
+    private func todoTitleBinding(id: UUID) -> Binding<String> {
+        Binding(
+            get: {
+                viewModel.todoItems.first(where: { $0.id == id })?.title ?? ""
+            },
+            set: { newValue in
+                viewModel.updateTodoTitle(id: id, title: newValue)
+            }
+        )
+    }
+
+    private func shoppingTitleBinding(id: UUID) -> Binding<String> {
+        Binding(
+            get: {
+                viewModel.shoppingItems.first(where: { $0.id == id })?.title ?? ""
+            },
+            set: { newValue in
+                viewModel.updateShoppingTitle(id: id, title: newValue)
+            }
+        )
+    }
+
+    private func todoCompletionBinding(id: UUID) -> Binding<Bool> {
+        Binding(
+            get: {
+                viewModel.todoItems.first(where: { $0.id == id })?.isCompleted ?? false
+            },
+            set: { newValue in
+                let current = viewModel.todoItems.first(where: { $0.id == id })?.isCompleted ?? false
+                if current != newValue {
+                    viewModel.toggleTodo(id: id)
+                }
+            }
+        )
+    }
+
+    private func shoppingCompletionBinding(id: UUID) -> Binding<Bool> {
+        Binding(
+            get: {
+                viewModel.shoppingItems.first(where: { $0.id == id })?.isCompleted ?? false
+            },
+            set: { newValue in
+                let current = viewModel.shoppingItems.first(where: { $0.id == id })?.isCompleted ?? false
+                if current != newValue {
+                    viewModel.toggleShopping(id: id)
+                }
+            }
+        )
     }
 
     private func reminderDayBinding(reminderIndex: Int, dayIndex: Int) -> Binding<Bool> {
@@ -397,6 +812,16 @@ struct ContentView: View {
                 extraReminders[reminderIndex].activeDays[dayIndex] = newValue
             }
         )
+    }
+
+    private func addTodo() {
+        viewModel.addTodo(title: newTodoTitle)
+        newTodoTitle = ""
+    }
+
+    private func addShoppingItem() {
+        viewModel.addShoppingItem(title: newShoppingTitle)
+        newShoppingTitle = ""
     }
 
     private func addPeriod() {
@@ -432,7 +857,7 @@ struct ContentView: View {
         }
     }
 
-    private func saveToModel() {
+    private func saveReminderSettings() {
         _ = viewModel.saveSettings(draftSettings)
     }
 
@@ -479,7 +904,7 @@ struct ContentView: View {
             return nil
         }
 
-        for offset in 0...13 {
+        for offset in 0 ... 13 {
             if inCurrentWindowOnly && offset > 0 {
                 break
             }

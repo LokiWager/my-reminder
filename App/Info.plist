@@ -20,6 +20,8 @@
     <string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>StandUpReminder needs calendar access to show your daily events in the Calendar page.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

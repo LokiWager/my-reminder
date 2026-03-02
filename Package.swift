@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "StandUpReminder",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v26)
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

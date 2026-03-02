@@ -11,7 +11,7 @@ struct StandUpReminderApp: App {
                 .environmentObject(viewModel)
                 .frame(minWidth: 560, minHeight: 420)
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 viewModel.refreshFromStore()
             }
