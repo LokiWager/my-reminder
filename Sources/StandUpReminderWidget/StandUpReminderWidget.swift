@@ -246,13 +246,15 @@ struct StandUpReminderProvider: TimelineProvider {
 
     private func dailyStandSlots(settings: SharedReminderSettings) -> [Int] {
         var slots: Set<Int> = []
-        let interval = max(settings.intervalMinutes, 1)
+        let sitInterval = max(settings.intervalMinutes, 1)
+        let standBreak = max(settings.standMinutes, 1)
+        let cycle = sitInterval + standBreak
 
         for period in settings.periods where period.isValid {
-            var cursor = period.startMinutes
+            var cursor = period.startMinutes + sitInterval
             while cursor <= period.endMinutes {
                 slots.insert(cursor)
-                cursor += interval
+                cursor += cycle
             }
         }
 

@@ -84,6 +84,9 @@ final class ReminderScheduler: @unchecked Sendable {
                 content.threadIdentifier = plan.threadIdentifier
                 content.categoryIdentifier = "standup.category"
                 content.sound = .default
+                if let iconAttachment = self.notificationIconAttachment() {
+                    content.attachments = [iconAttachment]
+                }
 
                 var components = DateComponents()
                 components.weekday = plan.weekday
@@ -169,13 +172,15 @@ final class ReminderScheduler: @unchecked Sendable {
 
     private func dailyStandSlots(settings: ReminderSettings) -> [Int] {
         var slots: Set<Int> = []
-        let interval = max(settings.intervalMinutes, 1)
+        let sitInterval = max(settings.intervalMinutes, 1)
+        let standBreak = max(settings.standMinutes, 1)
+        let cycle = sitInterval + standBreak
 
         for period in settings.periods where period.isValid {
-            var cursor = period.startMinutes
+            var cursor = period.startMinutes + sitInterval
             while cursor <= period.endMinutes {
                 slots.insert(cursor)
-                cursor += interval
+                cursor += cycle
             }
         }
 
@@ -190,6 +195,13 @@ final class ReminderScheduler: @unchecked Sendable {
             return "Study time. Stay focused."
         }
         return "It is time for \(title)."
+    }
+
+    private func notificationIconAttachment() -> UNNotificationAttachment? {
+        guard let iconURL = Bundle.main.url(forResource: "logo_chibi", withExtension: "png") else {
+            return nil
+        }
+        return try? UNNotificationAttachment(identifier: "standup-icon", url: iconURL)
     }
 
     static func minutesToDate(_ minutes: Int) -> Date {

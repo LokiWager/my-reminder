@@ -161,6 +161,11 @@ struct ContentView: View {
             detail
         }
         .onAppear(perform: syncFromModel)
+        .onChange(of: selection) { _, newSelection in
+            if newSelection == .today {
+                viewModel.refreshCalendarEvents(for: .now, requestAccessIfNeeded: false)
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -200,6 +205,7 @@ struct ContentView: View {
                 let timer = timerSnapshot(for: context.date)
                 let progress = progressSnapshot(for: context.date)
                 let reminderItems = todayItemLines(for: context.date)
+                let calendarEvents = todayCalendarEvents(for: context.date)
                 let todoPreview = sorted(items: viewModel.todoItems.filter { !$0.isCompleted }, mode: .pendingFirst)
                 let shoppingPreview = sorted(items: viewModel.shoppingItems.filter { !$0.isCompleted }, mode: .pendingFirst)
                 let inWorkWindow = timer.headline != nil
@@ -260,6 +266,32 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
+                    GroupBox("Today's Calendar Events") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            switch viewModel.calendarAccessState {
+                            case .granted:
+                                if calendarEvents.isEmpty {
+                                    Text("No calendar events today.")
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    ForEach(calendarEvents.prefix(6)) { event in
+                                        calendarEventRow(event)
+                                        if event.id != calendarEvents.prefix(6).last?.id {
+                                            Divider()
+                                        }
+                                    }
+                                }
+                            case .notDetermined:
+                                Text("Calendar access not granted yet. Open Calendar page to grant access.")
+                                    .foregroundStyle(.secondary)
+                            case .unknown, .denied, .restricted, .writeOnly:
+                                Text(viewModel.calendarStatusMessage)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: 16) {
                             dashboardListCard(
@@ -293,6 +325,9 @@ struct ContentView: View {
             }
         }
         .navigationTitle("Today")
+        .onAppear {
+            viewModel.refreshCalendarEvents(for: .now, requestAccessIfNeeded: false)
+        }
     }
 
     private var todoView: some View {
@@ -958,15 +993,25 @@ struct ContentView: View {
             }
     }
 
+    private func todayCalendarEvents(for date: Date) -> [CalendarEventItem] {
+        let calendar = Calendar.current
+        guard calendar.isDate(viewModel.calendarEventsDate, inSameDayAs: date) else {
+            return []
+        }
+        return viewModel.calendarEvents
+    }
+
     private func dailyStandReminderSlots() -> [Int] {
         var slots: Set<Int> = []
-        let interval = max(viewModel.settings.intervalMinutes, 1)
+        let sitInterval = max(viewModel.settings.intervalMinutes, 1)
+        let standBreak = max(viewModel.settings.standMinutes, 1)
+        let cycle = sitInterval + standBreak
 
         for period in viewModel.settings.periods where period.isValid {
-            var cursor = period.startMinutes
+            var cursor = period.startMinutes + sitInterval
             while cursor <= period.endMinutes {
                 slots.insert(cursor)
-                cursor += interval
+                cursor += cycle
             }
         }
 
