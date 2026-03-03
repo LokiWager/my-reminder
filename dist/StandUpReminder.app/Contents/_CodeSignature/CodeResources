@@ -6,7 +6,7 @@
 	<dict>
 		<key>Resources/AppIcon.icns</key>
 		<data>
-		x7/N113Bnyt8ibqfjAcLNp2Od/w=
+		YrL7NOvAoM6jd7d7YzJiN1qZpFU=
 		</data>
 		<key>Resources/logo_chibi.png</key>
 		<data>
@@ -19,16 +19,16 @@
 		<dict>
 			<key>cdhash</key>
 			<data>
-			x2/Txc4QvRyNqwZzRSxnX4tus8g=
+			xUVPa3IKkc1cVQAgKNBt9ckaJJQ=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"c76fd3c5ce10bd1c8dab0673452c675f8b6eb3c8"</string>
+			<string>identifier "com.haotingyi.standupreminder.widget"</string>
 		</dict>
 		<key>Resources/AppIcon.icns</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			U2x9F+DaO8qXGchj9z1f1chQ/k8i8YXA/KJw4dVq7/k=
+			zAERD7qRYOU1RSv7I/A1/6zpb7CxXXvXyV8zuzsrCLM=
 			</data>
 		</dict>
 		<key>Resources/logo_chibi.png</key>

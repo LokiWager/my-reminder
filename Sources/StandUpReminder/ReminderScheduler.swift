@@ -43,6 +43,12 @@ final class ReminderScheduler: @unchecked Sendable {
         }
     }
 
+    func notificationAuthorizationStatus(completion: @escaping @Sendable (UNAuthorizationStatus) -> Void) {
+        center.getNotificationSettings { settings in
+            completion(settings.authorizationStatus)
+        }
+    }
+
     func clearAll(completion: (@Sendable () -> Void)? = nil) {
         center.getPendingNotificationRequests { [weak self] requests in
             guard let self else { return }

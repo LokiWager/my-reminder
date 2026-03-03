@@ -1,6 +1,7 @@
 import Foundation
 import EventKit
 import SwiftUI
+import UserNotifications
 import WidgetKit
 
 @MainActor
@@ -19,8 +20,9 @@ final class ReminderViewModel: ObservableObject {
     private let settingsKey = "standup.settings.v1"
     private let todosKey = "assistant.todos.v1"
     private let shoppingKey = "assistant.shopping.v1"
-    private let appGroupID = "group.com.haotingyi.standupreminder"
+    private let notificationPermissionPromptedKey = "standup.notifications.prompted.v1"
     private let defaults: UserDefaults
+    private let standardDefaults = UserDefaults.standard
 
     private var lastKnownSettingsData: Data?
     private var lastKnownTodosData: Data?
@@ -28,13 +30,7 @@ final class ReminderViewModel: ObservableObject {
     private var syncTask: Task<Void, Never>?
 
     init() {
-        let groupDefaults = UserDefaults(suiteName: appGroupID) ?? .standard
-        defaults = groupDefaults
-
-        if groupDefaults.data(forKey: settingsKey) == nil,
-           let legacyData = UserDefaults.standard.data(forKey: settingsKey) {
-            groupDefaults.set(legacyData, forKey: settingsKey)
-        }
+        defaults = .standard
 
         let initialSettings: ReminderSettings
         let initialSettingsData: Data?
@@ -331,22 +327,54 @@ final class ReminderViewModel: ObservableObject {
         persistSettings()
 
         let settingsSnapshot = settings
-        scheduler.requestPermission { [weak self] granted, errorMessage in
+        scheduler.notificationAuthorizationStatus { [weak self] status in
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                guard granted else {
-                    self.statusMessage = errorMessage ?? "Permission denied."
-                    return
-                }
-
-                self.scheduler.apply(settings: settingsSnapshot) { status in
-                    Task { @MainActor [weak self] in
-                        self?.statusMessage = status
+                switch status {
+                case .authorized, .provisional, .ephemeral:
+                    self.scheduleNotifications(settingsSnapshot)
+                case .denied:
+                    self.statusMessage = "Notification permission denied in System Settings."
+                case .notDetermined:
+                    if self.notificationPermissionPrompted() {
+                        self.statusMessage = "Notification permission not granted. Enable it in System Settings."
+                        return
                     }
+                    self.markNotificationPermissionPrompted()
+                    self.scheduler.requestPermission { [weak self] granted, errorMessage in
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            guard granted else {
+                                self.statusMessage = errorMessage ?? "Permission denied."
+                                return
+                            }
+                            self.scheduleNotifications(settingsSnapshot)
+                        }
+                    }
+                @unknown default:
+                    self.statusMessage = "Unknown notification permission status."
                 }
             }
         }
+    }
+
+    private func scheduleNotifications(_ settingsSnapshot: ReminderSettings) {
+        scheduler.apply(settings: settingsSnapshot) { status in
+            Task { @MainActor [weak self] in
+                self?.statusMessage = status
+            }
+        }
+    }
+
+    private func notificationPermissionPrompted() -> Bool {
+        defaults.bool(forKey: notificationPermissionPromptedKey) ||
+            standardDefaults.bool(forKey: notificationPermissionPromptedKey)
+    }
+
+    private func markNotificationPermissionPrompted() {
+        defaults.set(true, forKey: notificationPermissionPromptedKey)
+        standardDefaults.set(true, forKey: notificationPermissionPromptedKey)
     }
 
     private func persistSettings() {

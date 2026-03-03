@@ -1,7 +1,6 @@
 import SwiftUI
 import WidgetKit
 
-private let appGroupID = "group.com.haotingyi.standupreminder"
 private let settingsKey = "standup.settings.v1"
 private let defaultActiveDays = [true, true, true, true, true, false, false]
 
@@ -117,7 +116,7 @@ private struct SharedReminderSettings: Codable, Sendable {
 
 private enum SharedSettingsStore {
     static var defaults: UserDefaults {
-        UserDefaults(suiteName: appGroupID) ?? .standard
+        .standard
     }
 
     static func load() -> SharedReminderSettings {

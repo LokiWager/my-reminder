@@ -4,6 +4,10 @@
 <dict>
 	<key>files</key>
 	<dict>
+		<key>Resources/AppIcon.icns</key>
+		<data>
+		YrL7NOvAoM6jd7d7YzJiN1qZpFU=
+		</data>
 		<key>Resources/logo_chibi.png</key>
 		<data>
 		fruRDEZJX7+09RNM2cLdDn60I6U=
@@ -11,6 +15,13 @@
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>Resources/AppIcon.icns</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			zAERD7qRYOU1RSv7I/A1/6zpb7CxXXvXyV8zuzsrCLM=
+			</data>
+		</dict>
 		<key>Resources/logo_chibi.png</key>
 		<dict>
 			<key>hash2</key>
