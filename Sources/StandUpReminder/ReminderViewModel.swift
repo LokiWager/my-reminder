@@ -17,10 +17,12 @@ final class ReminderViewModel: ObservableObject {
 
     private let scheduler = ReminderScheduler()
     private let eventStore = EKEventStore()
+    private let appGroupID = "group.com.haotingyi.standupreminder"
     private let settingsKey = "standup.settings.v1"
     private let todosKey = "assistant.todos.v1"
     private let shoppingKey = "assistant.shopping.v1"
     private let notificationPermissionPromptedKey = "standup.notifications.prompted.v1"
+    private let calendarNotificationLeadMinutes = 5
     private let defaults: UserDefaults
     private let standardDefaults = UserDefaults.standard
 
@@ -30,7 +32,25 @@ final class ReminderViewModel: ObservableObject {
     private var syncTask: Task<Void, Never>?
 
     init() {
-        defaults = .standard
+        let groupDefaults = UserDefaults(suiteName: appGroupID) ?? .standard
+        defaults = groupDefaults
+
+        if groupDefaults.data(forKey: settingsKey) == nil,
+           let legacyData = standardDefaults.data(forKey: settingsKey) {
+            groupDefaults.set(legacyData, forKey: settingsKey)
+        }
+        if groupDefaults.data(forKey: todosKey) == nil,
+           let legacyData = standardDefaults.data(forKey: todosKey) {
+            groupDefaults.set(legacyData, forKey: todosKey)
+        }
+        if groupDefaults.data(forKey: shoppingKey) == nil,
+           let legacyData = standardDefaults.data(forKey: shoppingKey) {
+            groupDefaults.set(legacyData, forKey: shoppingKey)
+        }
+        if !groupDefaults.bool(forKey: notificationPermissionPromptedKey),
+           standardDefaults.bool(forKey: notificationPermissionPromptedKey) {
+            groupDefaults.set(true, forKey: notificationPermissionPromptedKey)
+        }
 
         let initialSettings: ReminderSettings
         let initialSettingsData: Data?
@@ -95,7 +115,7 @@ final class ReminderViewModel: ObservableObject {
     @discardableResult
     func saveSettings(_ draft: ReminderSettings) -> Bool {
         let normalizedDraft = Self.normalized(draft)
-        if let error = validate(normalizedDraft) {
+        if normalizedDraft.isEnabled, let error = validate(normalizedDraft) {
             statusMessage = error
             return false
         }
@@ -103,6 +123,12 @@ final class ReminderViewModel: ObservableObject {
         settings = normalizedDraft
         applySettings()
         return true
+    }
+
+    func setNotificationsEnabled(_ enabled: Bool) {
+        guard settings.isEnabled != enabled else { return }
+        settings.isEnabled = enabled
+        applySettings()
     }
 
     func refreshFromStore() {
@@ -228,9 +254,10 @@ final class ReminderViewModel: ObservableObject {
         calendarEventsDate = dayStart
 
         switch EKEventStore.authorizationStatus(for: .event) {
-        case .fullAccess, .authorized:
+        case .fullAccess:
             calendarAccessState = .granted
             loadCalendarEvents(for: dayStart)
+            syncCalendarEventNotificationsIfNeeded()
         case .writeOnly:
             calendarAccessState = .writeOnly
             calendarEvents = []
@@ -271,6 +298,7 @@ final class ReminderViewModel: ObservableObject {
                 if granted {
                     self.calendarAccessState = .granted
                     self.loadCalendarEvents(for: dayStart)
+                    self.syncCalendarEventNotificationsIfNeeded()
                 } else {
                     self.calendarAccessState = .denied
                     self.calendarEvents = []
@@ -326,6 +354,15 @@ final class ReminderViewModel: ObservableObject {
     private func applySettings() {
         persistSettings()
 
+        guard settings.isEnabled else {
+            scheduler.clearAll { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.statusMessage = "Reminders are off."
+                }
+            }
+            return
+        }
+
         let settingsSnapshot = settings
         scheduler.notificationAuthorizationStatus { [weak self] status in
             Task { @MainActor [weak self] in
@@ -362,9 +399,72 @@ final class ReminderViewModel: ObservableObject {
     private func scheduleNotifications(_ settingsSnapshot: ReminderSettings) {
         scheduler.apply(settings: settingsSnapshot) { status in
             Task { @MainActor [weak self] in
-                self?.statusMessage = status
+                self?.syncCalendarEventNotificationsIfNeeded(baseStatus: status)
             }
         }
+    }
+
+    private func syncCalendarEventNotificationsIfNeeded(baseStatus: String? = nil) {
+        guard settings.isEnabled else {
+            scheduler.clearCalendarNotifications { [weak self] in
+                Task { @MainActor [weak self] in
+                    if let baseStatus {
+                        self?.statusMessage = baseStatus
+                    }
+                }
+            }
+            return
+        }
+
+        let authStatus = EKEventStore.authorizationStatus(for: .event)
+        guard authStatus == .fullAccess else {
+            if let baseStatus {
+                statusMessage = baseStatus
+            }
+            return
+        }
+
+        let items = upcomingCalendarNotificationItems()
+        scheduler.replaceCalendarNotifications(items: items, leadMinutes: calendarNotificationLeadMinutes) { [weak self] calendarStatus in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let baseStatus else { return }
+                if items.isEmpty {
+                    self.statusMessage = baseStatus
+                } else {
+                    self.statusMessage = "\(baseStatus) | \(calendarStatus)"
+                }
+            }
+        }
+    }
+
+    private func upcomingCalendarNotificationItems(days: Int = 7) -> [CalendarNotificationItem] {
+        let now = Date()
+        let calendar = Calendar.current
+        guard let endDate = calendar.date(byAdding: .day, value: max(days, 1), to: now) else {
+            return []
+        }
+
+        let predicate = eventStore.predicateForEvents(withStart: now, end: endDate, calendars: nil)
+        return eventStore.events(matching: predicate)
+            .sorted { lhs, rhs in
+                if lhs.startDate == rhs.startDate {
+                    let leftTitle = lhs.title ?? ""
+                    let rightTitle = rhs.title ?? ""
+                    return leftTitle.localizedCaseInsensitiveCompare(rightTitle) == .orderedAscending
+                }
+                return lhs.startDate < rhs.startDate
+            }
+            .map { event in
+                let rawTitle = event.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let title = rawTitle.isEmpty ? "Calendar Event" : rawTitle
+                return CalendarNotificationItem(
+                    eventID: event.eventIdentifier ?? UUID().uuidString,
+                    title: title,
+                    startDate: event.startDate,
+                    isAllDay: event.isAllDay
+                )
+            }
     }
 
     private func notificationPermissionPrompted() -> Bool {
@@ -437,7 +537,7 @@ final class ReminderViewModel: ObservableObject {
         guard normalizedDecoded != settings else { return }
 
         settings = normalizedDecoded
-        statusMessage = "Notifications are active."
+        statusMessage = normalizedDecoded.isEnabled ? "Notifications are active." : "Reminders are off."
     }
 
     private func reloadItemsFromStoreIfNeeded(force: Bool, forKey key: String, kind: AssistantItemKind) {
@@ -529,7 +629,6 @@ final class ReminderViewModel: ObservableObject {
 
     private static func normalized(_ candidate: ReminderSettings) -> ReminderSettings {
         var normalized = candidate
-        normalized.isEnabled = true
         if normalized.extraReminders.isEmpty {
             normalized.extraReminders = ReminderSettings.defaultExtraReminders
         }

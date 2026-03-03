@@ -133,7 +133,7 @@ struct ContentView: View {
 
     private var draftSettings: ReminderSettings {
         ReminderSettings(
-            isEnabled: true,
+            isEnabled: viewModel.settings.isEnabled,
             intervalMinutes: intervalMinutes,
             standMinutes: standMinutes,
             periods: periods.map(\.timeRange),
@@ -249,7 +249,10 @@ struct ContentView: View {
 
                     GroupBox("Today's Reminder Items") {
                         VStack(alignment: .leading, spacing: 6) {
-                            if inWorkWindow {
+                            if !viewModel.settings.isEnabled {
+                                Text("Notifications are off.")
+                                    .foregroundStyle(.secondary)
+                            } else if inWorkWindow {
                                 if reminderItems.isEmpty {
                                     Text("No extra reminder items today.")
                                         .foregroundStyle(.secondary)
@@ -378,6 +381,20 @@ struct ContentView: View {
     private var remindersView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                Text("Global Notification Switch")
+                    .font(.title.weight(.bold))
+
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Enable All Notifications", isOn: notificationsEnabledBinding)
+                            .toggleStyle(.switch)
+                        Text(viewModel.settings.isEnabled ? "All stand-up and reminder notifications are active." : "All notifications are disabled.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 Text("Stand-up")
                     .font(.title.weight(.bold))
 
@@ -897,6 +914,10 @@ struct ContentView: View {
     }
 
     private func timerSnapshot(for date: Date) -> TimerSnapshot {
+        guard viewModel.settings.isEnabled else {
+            return TimerSnapshot(headline: nil, subtitle: "Notifications are off.")
+        }
+
         guard isInActiveWindow(date) else {
             return TimerSnapshot(
                 headline: nil,
@@ -1019,6 +1040,10 @@ struct ContentView: View {
     }
 
     private func isInActiveWindow(_ date: Date) -> Bool {
+        guard viewModel.settings.isEnabled else {
+            return false
+        }
+
         let calendar = Calendar.current
         let weekday = calendar.component(.weekday, from: date)
         let mondayIndex = (weekday + 5) % 7
@@ -1038,6 +1063,15 @@ struct ContentView: View {
             Text(value)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var notificationsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.settings.isEnabled },
+            set: { newValue in
+                viewModel.setNotificationsEnabled(newValue)
+            }
+        )
     }
 }
 

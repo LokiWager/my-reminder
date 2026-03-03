@@ -1,9 +1,17 @@
 import Foundation
 @preconcurrency import UserNotifications
 
+struct CalendarNotificationItem: Sendable {
+    let eventID: String
+    let title: String
+    let startDate: Date
+    let isAllDay: Bool
+}
+
 final class ReminderScheduler: @unchecked Sendable {
     private let center = UNUserNotificationCenter.current()
     private let identifierPrefix = "standup-reminder-"
+    private let calendarIdentifierPrefix = "standup-reminder-calendar-"
 
     private struct NotificationPlan {
         let identifier: String
@@ -55,6 +63,89 @@ final class ReminderScheduler: @unchecked Sendable {
             let ids = requests
                 .map(\.identifier)
                 .filter { $0.hasPrefix(self.identifierPrefix) }
+            self.center.removePendingNotificationRequests(withIdentifiers: ids)
+            completion?()
+        }
+    }
+
+    func replaceCalendarNotifications(
+        items: [CalendarNotificationItem],
+        leadMinutes: Int = 5,
+        completion: @escaping @Sendable (String) -> Void
+    ) {
+        clearCalendarNotifications { [weak self] in
+            guard let self else { return }
+
+            let now = Date()
+            let validLeadMinutes = max(0, leadMinutes)
+            let calendar = Calendar.current
+            let requests: [UNNotificationRequest] = items.compactMap { item in
+                let fireDate: Date
+                if item.isAllDay {
+                    let dayStart = calendar.startOfDay(for: item.startDate)
+                    fireDate = calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
+                } else {
+                    fireDate = item.startDate.addingTimeInterval(TimeInterval(-60 * validLeadMinutes))
+                }
+                guard fireDate > now else { return nil }
+
+                let content = UNMutableNotificationContent()
+                content.title = item.title
+                content.body = "Starting soon in \(validLeadMinutes) minutes."
+                content.threadIdentifier = "calendar-reminders"
+                content.categoryIdentifier = "standup.category"
+                content.sound = .default
+                if let iconAttachment = self.notificationIconAttachment() {
+                    content.attachments = [iconAttachment]
+                }
+
+                var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+                components.second = 0
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+                let request = UNNotificationRequest(
+                    identifier: "\(self.calendarIdentifierPrefix)\(abs(item.eventID.hashValue))-\(Int(item.startDate.timeIntervalSince1970))",
+                    content: content,
+                    trigger: trigger
+                )
+                return request
+            }
+
+            guard !requests.isEmpty else {
+                completion("No upcoming calendar notifications to schedule.")
+                return
+            }
+
+            let cappedRequests = Array(requests.prefix(120))
+            let group = DispatchGroup()
+            let counter = FailureCounter()
+
+            for request in cappedRequests {
+                group.enter()
+                self.center.add(request) { error in
+                    if error != nil {
+                        counter.increment()
+                    }
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                let failures = counter.current()
+                if failures == 0 {
+                    completion("Scheduled \(cappedRequests.count) calendar reminders.")
+                } else {
+                    completion("Scheduled \(cappedRequests.count - failures)/\(cappedRequests.count) calendar reminders.")
+                }
+            }
+        }
+    }
+
+    func clearCalendarNotifications(completion: (@Sendable () -> Void)? = nil) {
+        center.getPendingNotificationRequests { [weak self] requests in
+            guard let self else { return }
+            let ids = requests
+                .map(\.identifier)
+                .filter { $0.hasPrefix(self.calendarIdentifierPrefix) }
             self.center.removePendingNotificationRequests(withIdentifiers: ids)
             completion?()
         }

@@ -1,6 +1,7 @@
 import SwiftUI
 import WidgetKit
 
+private let appGroupID = "group.com.haotingyi.standupreminder"
 private let settingsKey = "standup.settings.v1"
 private let defaultActiveDays = [true, true, true, true, true, false, false]
 
@@ -116,7 +117,7 @@ private struct SharedReminderSettings: Codable, Sendable {
 
 private enum SharedSettingsStore {
     static var defaults: UserDefaults {
-        .standard
+        UserDefaults(suiteName: appGroupID) ?? .standard
     }
 
     static func load() -> SharedReminderSettings {
@@ -171,19 +172,25 @@ struct StandUpReminderProvider: TimelineProvider {
 
     private func buildEntry(for date: Date) -> StandUpReminderEntry {
         let settings = SharedSettingsStore.load()
-        let inWindow = isInActiveWindow(date, settings: settings)
+        let notificationsEnabled = settings.isEnabled
+        let inWindow = notificationsEnabled && isInActiveWindow(date, settings: settings)
 
-        let modeText = inWindow
-            ? "Work window"
-            : "Off work hours. No extra pay, handle your own plans."
+        let modeText: String
+        if !notificationsEnabled {
+            modeText = "Notifications are off."
+        } else if inWindow {
+            modeText = "Work window"
+        } else {
+            modeText = "Off work hours. No extra pay, handle your own plans."
+        }
 
         return StandUpReminderEntry(
             date: date,
             inWorkWindow: inWindow,
             nextStandMinutes: inWindow ? minutesUntilNextStandInCurrentWindow(from: date, settings: settings) : nil,
             modeText: modeText,
-            progress: progressSnapshot(for: date, settings: settings),
-            todayItems: todayItems(for: date, settings: settings)
+            progress: notificationsEnabled ? progressSnapshot(for: date, settings: settings) : StandProgress(done: 0, total: 0),
+            todayItems: notificationsEnabled ? todayItems(for: date, settings: settings) : []
         )
     }
 
