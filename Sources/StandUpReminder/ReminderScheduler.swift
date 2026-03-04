@@ -12,6 +12,10 @@ final class ReminderScheduler: @unchecked Sendable {
     private let center = UNUserNotificationCenter.current()
     private let identifierPrefix = "standup-reminder-"
     private let calendarIdentifierPrefix = "standup-reminder-calendar-"
+    // Keep request volume safely below usernotificationsd limits to avoid silent drops.
+    private let maxPendingBudget = 64
+    private let calendarRequestBudget = 8
+    private let reservedRequestSlots = 2
 
     private struct NotificationPlan {
         let identifier: String
@@ -120,7 +124,7 @@ final class ReminderScheduler: @unchecked Sendable {
                 return
             }
 
-            let cappedRequests = Array(requests.prefix(120))
+            let cappedRequests = Array(requests.prefix(calendarRequestBudget))
             let group = DispatchGroup()
             let counter = FailureCounter()
 
@@ -137,7 +141,11 @@ final class ReminderScheduler: @unchecked Sendable {
             group.notify(queue: .main) {
                 let failures = counter.current()
                 if failures == 0 {
-                    completion("Scheduled \(cappedRequests.count) calendar reminders.")
+                    if requests.count > cappedRequests.count {
+                        completion("Scheduled \(cappedRequests.count)/\(requests.count) calendar reminders (system limit).")
+                    } else {
+                        completion("Scheduled \(cappedRequests.count) calendar reminders.")
+                    }
                 } else {
                     completion("Scheduled \(cappedRequests.count - failures)/\(cappedRequests.count) calendar reminders.")
                 }
@@ -154,6 +162,38 @@ final class ReminderScheduler: @unchecked Sendable {
             self.center.removePendingNotificationRequests(withIdentifiers: ids)
             self.center.removeDeliveredNotifications(withIdentifiers: ids)
             completion?()
+        }
+    }
+
+    func sendTestNotification(
+        title: String = "StandUpReminder Test",
+        body: String = "If you can see this alert, notifications are working.",
+        delaySeconds: Int = 1,
+        completion: @escaping @Sendable (String?) -> Void
+    ) {
+        let sanitizedDelay = max(1, min(30, delaySeconds))
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.threadIdentifier = "standup-test"
+        content.categoryIdentifier = "standup.category"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: TimeInterval(sanitizedDelay),
+            repeats: false
+        )
+        let request = UNNotificationRequest(
+            identifier: "\(identifierPrefix)test-\(Int(Date().timeIntervalSince1970))",
+            content: content,
+            trigger: trigger
+        )
+        center.add(request) { error in
+            if let error {
+                completion("Failed to schedule test notification: \(error.localizedDescription)")
+            } else {
+                completion(nil)
+            }
         }
     }
 
@@ -177,10 +217,25 @@ final class ReminderScheduler: @unchecked Sendable {
                 return
             }
 
+            let weeklyRequestBudget = max(1, maxPendingBudget - calendarRequestBudget - reservedRequestSlots)
+            let now = Date()
+            let prioritizedPlans = plans.sorted { lhs, rhs in
+                let leftDate = self.nextTriggerDate(for: lhs, now: now) ?? .distantFuture
+                let rightDate = self.nextTriggerDate(for: rhs, now: now) ?? .distantFuture
+                if leftDate != rightDate {
+                    return leftDate < rightDate
+                }
+                if lhs.threadIdentifier != rhs.threadIdentifier {
+                    return lhs.threadIdentifier == "custom-reminders"
+                }
+                return lhs.identifier < rhs.identifier
+            }
+            let selectedPlans = Array(prioritizedPlans.prefix(weeklyRequestBudget))
+
             let group = DispatchGroup()
             let counter = FailureCounter()
 
-            for plan in plans {
+            for plan in selectedPlans {
                 let content = UNMutableNotificationContent()
                 content.title = plan.title
                 content.body = plan.body
@@ -208,9 +263,13 @@ final class ReminderScheduler: @unchecked Sendable {
             group.notify(queue: .main) {
                 let failures = counter.current()
                 if failures == 0 {
-                    completion("Scheduled \(plans.count) weekly reminders.")
+                    if selectedPlans.count < plans.count {
+                        completion("Scheduled \(selectedPlans.count)/\(plans.count) weekly reminders (system limit).")
+                    } else {
+                        completion("Scheduled \(selectedPlans.count) weekly reminders.")
+                    }
                 } else {
-                    completion("Scheduled \(plans.count - failures)/\(plans.count) reminders.")
+                    completion("Scheduled \(selectedPlans.count - failures)/\(selectedPlans.count) reminders.")
                 }
             }
         }
@@ -295,6 +354,20 @@ final class ReminderScheduler: @unchecked Sendable {
             return "Study time. Stay focused."
         }
         return "It is time for \(title)."
+    }
+
+    private func nextTriggerDate(for plan: NotificationPlan, now: Date) -> Date? {
+        var components = DateComponents()
+        components.weekday = plan.weekday
+        components.hour = plan.hour
+        components.minute = plan.minute
+        return Calendar.current.nextDate(
+            after: now,
+            matching: components,
+            matchingPolicy: .nextTime,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        )
     }
 
     static func minutesToDate(_ minutes: Int) -> Date {

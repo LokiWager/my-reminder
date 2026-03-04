@@ -25,9 +25,28 @@ struct StandUpReminderApp: App {
             MenuBarMenuView()
                 .environmentObject(viewModel)
         } label: {
-            Label("Stand", systemImage: "figure.stand")
+            menuBarIconLabel
         }
         .menuBarExtraStyle(.menu)
+    }
+
+    @ViewBuilder
+    private var menuBarIconLabel: some View {
+        if let icon = preparedMenuBarIcon() {
+            Image(nsImage: icon)
+        } else {
+            Label("Stand", systemImage: "figure.stand")
+        }
+    }
+
+    private func preparedMenuBarIcon() -> NSImage? {
+        guard let originalIcon = NSImage(named: "menubar_icon"),
+              let icon = originalIcon.copy() as? NSImage else {
+            return nil
+        }
+        icon.size = NSSize(width: 16, height: 16)
+        icon.isTemplate = true
+        return icon
     }
 }
 

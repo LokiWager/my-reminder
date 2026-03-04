@@ -113,6 +113,34 @@ final class ReminderViewModel: ObservableObject {
         applySettings()
     }
 
+    func sendTestNotification() {
+        scheduler.notificationAuthorizationStatus { [weak self] status in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch status {
+                case .authorized, .provisional, .ephemeral:
+                    self.scheduleTestNotification()
+                case .notDetermined:
+                    self.markNotificationPermissionPrompted()
+                    self.scheduler.requestPermission { [weak self] granted, errorMessage in
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            guard granted else {
+                                self.statusMessage = errorMessage ?? "Permission denied."
+                                return
+                            }
+                            self.scheduleTestNotification()
+                        }
+                    }
+                case .denied:
+                    self.statusMessage = "Notification permission denied in System Settings."
+                @unknown default:
+                    self.statusMessage = "Unknown notification permission status."
+                }
+            }
+        }
+    }
+
     func setMouseMoverEnabled(_ enabled: Bool) {
         guard settings.isMouseMoverEnabled != enabled else { return }
         settings.isMouseMoverEnabled = enabled
@@ -408,6 +436,19 @@ final class ReminderViewModel: ObservableObject {
                 @unknown default:
                     guard generation == self.applySettingsGeneration else { return }
                     self.statusMessage = "Unknown notification permission status."
+                }
+            }
+        }
+    }
+
+    private func scheduleTestNotification() {
+        scheduler.sendTestNotification { [weak self] errorMessage in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let errorMessage {
+                    self.statusMessage = errorMessage
+                } else {
+                    self.statusMessage = "Test notification scheduled. It should appear in about 1 second."
                 }
             }
         }

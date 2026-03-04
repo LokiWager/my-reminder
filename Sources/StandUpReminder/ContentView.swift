@@ -61,7 +61,7 @@ private struct DailyProgressSnapshot {
     }
 }
 
-private struct PeriodDraft: Identifiable {
+private struct PeriodDraft: Identifiable, Equatable {
     let id = UUID()
     var startMinutes: Int
     var endMinutes: Int
@@ -76,7 +76,7 @@ private struct PeriodDraft: Identifiable {
     }
 }
 
-private struct ExtraReminderDraft: Identifiable {
+private struct ExtraReminderDraft: Identifiable, Equatable {
     var id: UUID
     var title: String
     var timeMinutes: Int
@@ -127,6 +127,7 @@ struct ContentView: View {
     @State private var todoSortMode: ListSortMode = .pendingFirst
     @State private var shoppingSortMode: ListSortMode = .pendingFirst
     @State private var calendarSelection = Date()
+    @State private var reminderAutoSaveTask: Task<Void, Never>?
 
     private let timeOptions = Array(stride(from: 0, through: 23 * 60 + 30, by: 30))
     private let daySymbols = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -262,7 +263,7 @@ struct ContentView: View {
                             if !viewModel.settings.isEnabled {
                                 Text("Notifications are off.")
                                     .foregroundStyle(.secondary)
-                            } else if inWorkWindow {
+                            } else {
                                 if reminderItems.isEmpty {
                                     Text("No extra reminder items today.")
                                         .foregroundStyle(.secondary)
@@ -271,9 +272,6 @@ struct ContentView: View {
                                         Text("• \(item)")
                                     }
                                 }
-                            } else {
-                                Text("Off work hours. No extra pay, handle your own plans.")
-                                    .foregroundStyle(.secondary)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -401,6 +399,12 @@ struct ContentView: View {
                         Text(viewModel.settings.isEnabled ? "All stand-up and reminder notifications are active." : "All notifications are disabled.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        Button {
+                            viewModel.sendTestNotification()
+                        } label: {
+                            Label("Send Test Notification", systemImage: "bell.badge")
+                        }
+                        .buttonStyle(.bordered)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -484,10 +488,9 @@ struct ContentView: View {
                                 Toggle("Enable", isOn: $extraReminders[idx].isEnabled)
                                 TextField("Title", text: $extraReminders[idx].title)
 
-                                LabeledTimePicker(
+                                MinuteTimePicker(
                                     title: "Time",
-                                    selection: $extraReminders[idx].timeMinutes,
-                                    options: timeOptions
+                                    minutes: $extraReminders[idx].timeMinutes
                                 )
 
                                 HStack(spacing: 8) {
@@ -533,6 +536,24 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Reminders")
+        .onChange(of: periods) { _, _ in
+            scheduleReminderAutoSave()
+        }
+        .onChange(of: intervalMinutes) { _, _ in
+            scheduleReminderAutoSave()
+        }
+        .onChange(of: standMinutes) { _, _ in
+            scheduleReminderAutoSave()
+        }
+        .onChange(of: activeDays) { _, _ in
+            scheduleReminderAutoSave()
+        }
+        .onChange(of: extraReminders) { _, _ in
+            scheduleReminderAutoSave()
+        }
+        .onDisappear {
+            reminderAutoSaveTask?.cancel()
+        }
     }
 
     private var mouseMoverView: some View {
@@ -965,6 +986,16 @@ struct ContentView: View {
         _ = viewModel.saveSettings(draftSettings)
     }
 
+    private func scheduleReminderAutoSave() {
+        reminderAutoSaveTask?.cancel()
+        reminderAutoSaveTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard !Task.isCancelled else { return }
+            guard hasUnsavedReminderChanges else { return }
+            _ = viewModel.saveSettings(draftSettings)
+        }
+    }
+
     private func timerSnapshot(for date: Date) -> TimerSnapshot {
         guard viewModel.settings.isEnabled else {
             return TimerSnapshot(headline: nil, subtitle: "Notifications are off.")
@@ -1171,5 +1202,22 @@ private struct LabeledTimePicker: View {
         let hour = minutes / 60
         let min = minutes % 60
         return String(format: "%02d:%02d", hour, min)
+    }
+}
+
+private struct MinuteTimePicker: View {
+    let title: String
+    @Binding var minutes: Int
+
+    var body: some View {
+        DatePicker(
+            title,
+            selection: Binding(
+                get: { ReminderScheduler.minutesToDate(minutes) },
+                set: { minutes = ReminderScheduler.dateToMinutes($0) }
+            ),
+            displayedComponents: .hourAndMinute
+        )
+        .datePickerStyle(.field)
     }
 }
