@@ -4,6 +4,7 @@ private enum AppSection: String, CaseIterable, Hashable {
     case today
     case todo
     case reminders
+    case mouseMover
     case shopping
     case calendar
     case weather
@@ -14,6 +15,7 @@ private enum AppSection: String, CaseIterable, Hashable {
         case .today: return "Today"
         case .todo: return "Todo"
         case .reminders: return "Reminders"
+        case .mouseMover: return "Mouse Mover"
         case .shopping: return "Shopping"
         case .calendar: return "Calendar"
         case .weather: return "Weather"
@@ -26,6 +28,7 @@ private enum AppSection: String, CaseIterable, Hashable {
         case .today: return "sun.max"
         case .todo: return "checklist"
         case .reminders: return "bell"
+        case .mouseMover: return "cursorarrow.motionlines"
         case .shopping: return "cart"
         case .calendar: return "calendar"
         case .weather: return "cloud.sun"
@@ -130,10 +133,15 @@ struct ContentView: View {
     private let shortDaySymbols = ["M", "T", "W", "T", "F", "S", "S"]
     private let standIntervals = [15, 30, 45, 60, 75, 90]
     private let standBreaks = [5, 10, 15, 20, 25, 30]
+    private let mouseMoverIdleOptions = [1, 2, 3, 5, 10, 15]
+    private let mouseMoverMoveIntervalOptions = [1, 2, 3, 5, 10]
 
     private var draftSettings: ReminderSettings {
         ReminderSettings(
             isEnabled: viewModel.settings.isEnabled,
+            isMouseMoverEnabled: viewModel.settings.isMouseMoverEnabled,
+            mouseMoverIdleThresholdMinutes: viewModel.settings.mouseMoverIdleThresholdMinutes,
+            mouseMoverMoveIntervalMinutes: viewModel.settings.mouseMoverMoveIntervalMinutes,
             intervalMinutes: intervalMinutes,
             standMinutes: standMinutes,
             periods: periods.map(\.timeRange),
@@ -188,6 +196,8 @@ struct ContentView: View {
             todoView
         case .reminders:
             remindersView
+        case .mouseMover:
+            mouseMoverView
         case .shopping:
             shoppingView
         case .calendar:
@@ -523,6 +533,48 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Reminders")
+    }
+
+    private var mouseMoverView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Mouse Mover")
+                    .font(.title.weight(.bold))
+
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Enable Mouse Mover", isOn: mouseMoverEnabledBinding)
+                            .toggleStyle(.switch)
+
+                        HStack {
+                            Picker("Idle Threshold", selection: mouseMoverIdleThresholdBinding) {
+                                ForEach(mouseMoverIdleOptions, id: \.self) { value in
+                                    Text("\(value) min").tag(value)
+                                }
+                            }
+                            .pickerStyle(.menu)
+
+                            Picker("Move Interval", selection: mouseMoverMoveIntervalBinding) {
+                                ForEach(mouseMoverMoveIntervalOptions, id: \.self) { value in
+                                    Text("\(value) min").tag(value)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        Text(viewModel.settings.isMouseMoverEnabled
+                             ? "No input for \(viewModel.settings.mouseMoverIdleThresholdMinutes) min, then move once every \(viewModel.settings.mouseMoverMoveIntervalMinutes) min."
+                             : "Mouse mover is off.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Mouse Mover")
     }
 
     private var shoppingView: some View {
@@ -1070,6 +1122,33 @@ struct ContentView: View {
             get: { viewModel.settings.isEnabled },
             set: { newValue in
                 viewModel.setNotificationsEnabled(newValue)
+            }
+        )
+    }
+
+    private var mouseMoverEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.settings.isMouseMoverEnabled },
+            set: { newValue in
+                viewModel.setMouseMoverEnabled(newValue)
+            }
+        )
+    }
+
+    private var mouseMoverIdleThresholdBinding: Binding<Int> {
+        Binding(
+            get: { viewModel.settings.mouseMoverIdleThresholdMinutes },
+            set: { newValue in
+                viewModel.setMouseMoverIdleThresholdMinutes(newValue)
+            }
+        )
+    }
+
+    private var mouseMoverMoveIntervalBinding: Binding<Int> {
+        Binding(
+            get: { viewModel.settings.mouseMoverMoveIntervalMinutes },
+            set: { newValue in
+                viewModel.setMouseMoverMoveIntervalMinutes(newValue)
             }
         )
     }

@@ -19,18 +19,3 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: App/Info.plist
-    dependencies:
-      - target: StandUpReminderWidgetExtension
-  StandUpReminderWidgetExtension:
-    type: app-extension
-    platform: macOS
-    sources:
-      - path: Sources/StandUpReminderWidget
-      - path: Resources
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.haotingyi.standupreminder.widget
-        PRODUCT_NAME: StandUpReminderWidgetExtension
-        CODE_SIGNING_ALLOWED: NO
-        GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: Widget/Info.plist

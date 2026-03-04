@@ -6,6 +6,7 @@ import SwiftUI
 struct StandUpReminderApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = ReminderViewModel()
+    @State private var isMenuBarIconVisible = true
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -19,23 +20,64 @@ struct StandUpReminderApp: App {
                 viewModel.refreshFromStore()
             }
         }
+
+        MenuBarExtra(isInserted: $isMenuBarIconVisible) {
+            MenuBarMenuView()
+                .environmentObject(viewModel)
+        } label: {
+            Label("Stand", systemImage: "figure.stand")
+        }
+        .menuBarExtraStyle(.menu)
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    @MainActor
+    static func presentMainWindow() {
+        _ = NSApp.setActivationPolicy(.regular)
+        if let window = NSApp.windows.first {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let iconPath = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
            let iconImage = NSImage(contentsOfFile: iconPath) {
             NSApp.applicationIconImage = iconImage
         }
         UNUserNotificationCenter.current().delegate = self
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWindowWillClose),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleWindowWillClose() {
+        Task { @MainActor in
+            DispatchQueue.main.async {
+                let hasVisibleWindow = NSApp.windows.contains { window in
+                    window.isVisible && !window.isMiniaturized && window.canBecomeMain
+                }
+                if !hasVisibleWindow {
+                    _ = NSApp.setActivationPolicy(.accessory)
+                }
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if let window = sender.windows.first {
-            window.makeKeyAndOrderFront(nil)
-            sender.activate(ignoringOtherApps: true)
-        }
+        AppDelegate.presentMainWindow()
         return false
     }
 
@@ -54,10 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     ) {
         completionHandler()
         Task { @MainActor in
-            if let window = NSApp.windows.first {
-                window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-            }
+            AppDelegate.presentMainWindow()
         }
     }
 }

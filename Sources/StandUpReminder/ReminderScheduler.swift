@@ -58,12 +58,12 @@ final class ReminderScheduler: @unchecked Sendable {
     }
 
     func clearAll(completion: (@Sendable () -> Void)? = nil) {
-        center.getPendingNotificationRequests { [weak self] requests in
+        center.getPendingNotificationRequests { [weak self] _ in
             guard let self else { return }
-            let ids = requests
-                .map(\.identifier)
-                .filter { $0.hasPrefix(self.identifierPrefix) }
-            self.center.removePendingNotificationRequests(withIdentifiers: ids)
+            // Remove every pending request for this app to prevent duplicate alerts
+            // from older identifier formats or previously built app variants.
+            self.center.removeAllPendingNotificationRequests()
+            self.center.removeAllDeliveredNotifications()
             completion?()
         }
     }
@@ -80,14 +80,22 @@ final class ReminderScheduler: @unchecked Sendable {
             let validLeadMinutes = max(0, leadMinutes)
             let calendar = Calendar.current
             let requests: [UNNotificationRequest] = items.compactMap { item in
-                let fireDate: Date
+                let targetFireDate: Date
                 if item.isAllDay {
                     let dayStart = calendar.startOfDay(for: item.startDate)
-                    fireDate = calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
+                    targetFireDate = calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
                 } else {
-                    fireDate = item.startDate.addingTimeInterval(TimeInterval(-60 * validLeadMinutes))
+                    targetFireDate = item.startDate.addingTimeInterval(TimeInterval(-60 * validLeadMinutes))
                 }
-                guard fireDate > now else { return nil }
+                let fireDate: Date
+                if targetFireDate > now {
+                    fireDate = targetFireDate
+                } else {
+                    // If already inside the lead window but event has not started,
+                    // fire quickly instead of dropping this reminder.
+                    guard item.startDate > now else { return nil }
+                    fireDate = now.addingTimeInterval(5)
+                }
 
                 let content = UNMutableNotificationContent()
                 content.title = item.title
@@ -95,9 +103,6 @@ final class ReminderScheduler: @unchecked Sendable {
                 content.threadIdentifier = "calendar-reminders"
                 content.categoryIdentifier = "standup.category"
                 content.sound = .default
-                if let iconAttachment = self.notificationIconAttachment() {
-                    content.attachments = [iconAttachment]
-                }
 
                 var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
                 components.second = 0
@@ -147,6 +152,7 @@ final class ReminderScheduler: @unchecked Sendable {
                 .map(\.identifier)
                 .filter { $0.hasPrefix(self.calendarIdentifierPrefix) }
             self.center.removePendingNotificationRequests(withIdentifiers: ids)
+            self.center.removeDeliveredNotifications(withIdentifiers: ids)
             completion?()
         }
     }
@@ -181,9 +187,6 @@ final class ReminderScheduler: @unchecked Sendable {
                 content.threadIdentifier = plan.threadIdentifier
                 content.categoryIdentifier = "standup.category"
                 content.sound = .default
-                if let iconAttachment = self.notificationIconAttachment() {
-                    content.attachments = [iconAttachment]
-                }
 
                 var components = DateComponents()
                 components.weekday = plan.weekday
@@ -292,13 +295,6 @@ final class ReminderScheduler: @unchecked Sendable {
             return "Study time. Stay focused."
         }
         return "It is time for \(title)."
-    }
-
-    private func notificationIconAttachment() -> UNNotificationAttachment? {
-        guard let iconURL = Bundle.main.url(forResource: "logo_chibi", withExtension: "png") else {
-            return nil
-        }
-        return try? UNNotificationAttachment(identifier: "standup-icon", url: iconURL)
     }
 
     static func minutesToDate(_ minutes: Int) -> Date {

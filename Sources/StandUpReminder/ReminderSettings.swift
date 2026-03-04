@@ -52,6 +52,9 @@ struct TimedReminder: Codable, Equatable, Identifiable {
 
 struct ReminderSettings: Codable, Equatable {
     var isEnabled: Bool
+    var isMouseMoverEnabled: Bool
+    var mouseMoverIdleThresholdMinutes: Int
+    var mouseMoverMoveIntervalMinutes: Int
     var intervalMinutes: Int
     var standMinutes: Int
     var periods: [TimeRange]
@@ -64,8 +67,14 @@ struct ReminderSettings: Codable, Equatable {
         TimedReminder(title: "Study Time", timeMinutes: 20 * 60)
     ]
 
+    static let defaultMouseMoverIdleThresholdMinutes = 2
+    static let defaultMouseMoverMoveIntervalMinutes = 1
+
     static let `default` = ReminderSettings(
         isEnabled: true,
+        isMouseMoverEnabled: false,
+        mouseMoverIdleThresholdMinutes: ReminderSettings.defaultMouseMoverIdleThresholdMinutes,
+        mouseMoverMoveIntervalMinutes: ReminderSettings.defaultMouseMoverMoveIntervalMinutes,
         intervalMinutes: 45,
         standMinutes: 15,
         periods: [.afternoon, .evening],
@@ -75,6 +84,9 @@ struct ReminderSettings: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case isEnabled
+        case isMouseMoverEnabled
+        case mouseMoverIdleThresholdMinutes
+        case mouseMoverMoveIntervalMinutes
         case intervalMinutes
         case standMinutes
         case periods
@@ -84,6 +96,9 @@ struct ReminderSettings: Codable, Equatable {
 
     init(
         isEnabled: Bool,
+        isMouseMoverEnabled: Bool,
+        mouseMoverIdleThresholdMinutes: Int,
+        mouseMoverMoveIntervalMinutes: Int,
         intervalMinutes: Int,
         standMinutes: Int,
         periods: [TimeRange],
@@ -91,6 +106,9 @@ struct ReminderSettings: Codable, Equatable {
         extraReminders: [TimedReminder]
     ) {
         self.isEnabled = isEnabled
+        self.isMouseMoverEnabled = isMouseMoverEnabled
+        self.mouseMoverIdleThresholdMinutes = mouseMoverIdleThresholdMinutes
+        self.mouseMoverMoveIntervalMinutes = mouseMoverMoveIntervalMinutes
         self.intervalMinutes = intervalMinutes
         self.standMinutes = standMinutes
         self.periods = periods
@@ -101,6 +119,11 @@ struct ReminderSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        isMouseMoverEnabled = try container.decodeIfPresent(Bool.self, forKey: .isMouseMoverEnabled) ?? false
+        mouseMoverIdleThresholdMinutes = try container.decodeIfPresent(Int.self, forKey: .mouseMoverIdleThresholdMinutes)
+            ?? ReminderSettings.defaultMouseMoverIdleThresholdMinutes
+        mouseMoverMoveIntervalMinutes = try container.decodeIfPresent(Int.self, forKey: .mouseMoverMoveIntervalMinutes)
+            ?? ReminderSettings.defaultMouseMoverMoveIntervalMinutes
         intervalMinutes = try container.decode(Int.self, forKey: .intervalMinutes)
         standMinutes = try container.decode(Int.self, forKey: .standMinutes)
         periods = try container.decode([TimeRange].self, forKey: .periods)

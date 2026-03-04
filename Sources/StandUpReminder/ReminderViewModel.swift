@@ -2,7 +2,6 @@ import Foundation
 import EventKit
 import SwiftUI
 import UserNotifications
-import WidgetKit
 
 @MainActor
 final class ReminderViewModel: ObservableObject {
@@ -16,41 +15,23 @@ final class ReminderViewModel: ObservableObject {
     @Published var statusMessage: String = "Ready."
 
     private let scheduler = ReminderScheduler()
+    private let mouseMover = MouseMoverService()
     private let eventStore = EKEventStore()
-    private let appGroupID = "group.com.haotingyi.standupreminder"
     private let settingsKey = "standup.settings.v1"
     private let todosKey = "assistant.todos.v1"
     private let shoppingKey = "assistant.shopping.v1"
     private let notificationPermissionPromptedKey = "standup.notifications.prompted.v1"
     private let calendarNotificationLeadMinutes = 5
     private let defaults: UserDefaults
-    private let standardDefaults = UserDefaults.standard
 
     private var lastKnownSettingsData: Data?
     private var lastKnownTodosData: Data?
     private var lastKnownShoppingData: Data?
     private var syncTask: Task<Void, Never>?
+    private var applySettingsGeneration = 0
 
     init() {
-        let groupDefaults = UserDefaults(suiteName: appGroupID) ?? .standard
-        defaults = groupDefaults
-
-        if groupDefaults.data(forKey: settingsKey) == nil,
-           let legacyData = standardDefaults.data(forKey: settingsKey) {
-            groupDefaults.set(legacyData, forKey: settingsKey)
-        }
-        if groupDefaults.data(forKey: todosKey) == nil,
-           let legacyData = standardDefaults.data(forKey: todosKey) {
-            groupDefaults.set(legacyData, forKey: todosKey)
-        }
-        if groupDefaults.data(forKey: shoppingKey) == nil,
-           let legacyData = standardDefaults.data(forKey: shoppingKey) {
-            groupDefaults.set(legacyData, forKey: shoppingKey)
-        }
-        if !groupDefaults.bool(forKey: notificationPermissionPromptedKey),
-           standardDefaults.bool(forKey: notificationPermissionPromptedKey) {
-            groupDefaults.set(true, forKey: notificationPermissionPromptedKey)
-        }
+        defaults = .standard
 
         let initialSettings: ReminderSettings
         let initialSettingsData: Data?
@@ -77,6 +58,7 @@ final class ReminderViewModel: ObservableObject {
         let loadedShopping = Self.loadItems(from: defaults, forKey: shoppingKey, kind: .shopping)
         shoppingItems = loadedShopping.items
         lastKnownShoppingData = loadedShopping.data
+        applyMouseMoverSettings()
 
         applySettings()
         startSettingsSyncPolling()
@@ -129,6 +111,32 @@ final class ReminderViewModel: ObservableObject {
         guard settings.isEnabled != enabled else { return }
         settings.isEnabled = enabled
         applySettings()
+    }
+
+    func setMouseMoverEnabled(_ enabled: Bool) {
+        guard settings.isMouseMoverEnabled != enabled else { return }
+        settings.isMouseMoverEnabled = enabled
+        persistSettings()
+        applyMouseMoverSettings()
+        statusMessage = enabled ? "Mouse mover enabled." : "Mouse mover disabled."
+    }
+
+    func setMouseMoverIdleThresholdMinutes(_ minutes: Int) {
+        let clamped = max(1, min(60, minutes))
+        guard settings.mouseMoverIdleThresholdMinutes != clamped else { return }
+        settings.mouseMoverIdleThresholdMinutes = clamped
+        persistSettings()
+        applyMouseMoverSettings()
+        statusMessage = "Mouse mover settings updated."
+    }
+
+    func setMouseMoverMoveIntervalMinutes(_ minutes: Int) {
+        let clamped = max(1, min(60, minutes))
+        guard settings.mouseMoverMoveIntervalMinutes != clamped else { return }
+        settings.mouseMoverMoveIntervalMinutes = clamped
+        persistSettings()
+        applyMouseMoverSettings()
+        statusMessage = "Mouse mover settings updated."
     }
 
     func refreshFromStore() {
@@ -353,11 +361,15 @@ final class ReminderViewModel: ObservableObject {
 
     private func applySettings() {
         persistSettings()
+        applyMouseMoverSettings()
+        applySettingsGeneration &+= 1
+        let generation = applySettingsGeneration
 
         guard settings.isEnabled else {
             scheduler.clearAll { [weak self] in
                 Task { @MainActor [weak self] in
-                    self?.statusMessage = "Reminders are off."
+                    guard let self, generation == self.applySettingsGeneration else { return }
+                    self.statusMessage = "Reminders are off."
                 }
             }
             return
@@ -370,10 +382,13 @@ final class ReminderViewModel: ObservableObject {
 
                 switch status {
                 case .authorized, .provisional, .ephemeral:
-                    self.scheduleNotifications(settingsSnapshot)
+                    guard generation == self.applySettingsGeneration else { return }
+                    self.scheduleNotifications(settingsSnapshot, generation: generation)
                 case .denied:
+                    guard generation == self.applySettingsGeneration else { return }
                     self.statusMessage = "Notification permission denied in System Settings."
                 case .notDetermined:
+                    guard generation == self.applySettingsGeneration else { return }
                     if self.notificationPermissionPrompted() {
                         self.statusMessage = "Notification permission not granted. Enable it in System Settings."
                         return
@@ -382,24 +397,27 @@ final class ReminderViewModel: ObservableObject {
                     self.scheduler.requestPermission { [weak self] granted, errorMessage in
                         Task { @MainActor [weak self] in
                             guard let self else { return }
+                            guard generation == self.applySettingsGeneration else { return }
                             guard granted else {
                                 self.statusMessage = errorMessage ?? "Permission denied."
                                 return
                             }
-                            self.scheduleNotifications(settingsSnapshot)
+                            self.scheduleNotifications(settingsSnapshot, generation: generation)
                         }
                     }
                 @unknown default:
+                    guard generation == self.applySettingsGeneration else { return }
                     self.statusMessage = "Unknown notification permission status."
                 }
             }
         }
     }
 
-    private func scheduleNotifications(_ settingsSnapshot: ReminderSettings) {
+    private func scheduleNotifications(_ settingsSnapshot: ReminderSettings, generation: Int) {
         scheduler.apply(settings: settingsSnapshot) { status in
             Task { @MainActor [weak self] in
-                self?.syncCalendarEventNotificationsIfNeeded(baseStatus: status)
+                guard let self, generation == self.applySettingsGeneration else { return }
+                self.syncCalendarEventNotificationsIfNeeded(baseStatus: status)
             }
         }
     }
@@ -468,20 +486,17 @@ final class ReminderViewModel: ObservableObject {
     }
 
     private func notificationPermissionPrompted() -> Bool {
-        defaults.bool(forKey: notificationPermissionPromptedKey) ||
-            standardDefaults.bool(forKey: notificationPermissionPromptedKey)
+        defaults.bool(forKey: notificationPermissionPromptedKey)
     }
 
     private func markNotificationPermissionPrompted() {
         defaults.set(true, forKey: notificationPermissionPromptedKey)
-        standardDefaults.set(true, forKey: notificationPermissionPromptedKey)
     }
 
     private func persistSettings() {
         if let data = try? JSONEncoder().encode(settings) {
             defaults.set(data, forKey: settingsKey)
             lastKnownSettingsData = data
-            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 
@@ -537,6 +552,7 @@ final class ReminderViewModel: ObservableObject {
         guard normalizedDecoded != settings else { return }
 
         settings = normalizedDecoded
+        applyMouseMoverSettings()
         statusMessage = normalizedDecoded.isEnabled ? "Notifications are active." : "Reminders are off."
     }
 
@@ -629,6 +645,8 @@ final class ReminderViewModel: ObservableObject {
 
     private static func normalized(_ candidate: ReminderSettings) -> ReminderSettings {
         var normalized = candidate
+        normalized.mouseMoverIdleThresholdMinutes = max(1, min(60, normalized.mouseMoverIdleThresholdMinutes))
+        normalized.mouseMoverMoveIntervalMinutes = max(1, min(60, normalized.mouseMoverMoveIntervalMinutes))
         if normalized.extraReminders.isEmpty {
             normalized.extraReminders = ReminderSettings.defaultExtraReminders
         }
@@ -645,5 +663,13 @@ final class ReminderViewModel: ObservableObject {
             return mapped
         }
         return normalized
+    }
+
+    private func applyMouseMoverSettings() {
+        mouseMover.setConfiguration(
+            idleThresholdSeconds: TimeInterval(settings.mouseMoverIdleThresholdMinutes * 60),
+            minimumMoveGapSeconds: TimeInterval(settings.mouseMoverMoveIntervalMinutes * 60)
+        )
+        mouseMover.setEnabled(settings.isMouseMoverEnabled)
     }
 }

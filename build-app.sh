@@ -10,18 +10,12 @@ DERIVED_DATA_DIR="$ROOT_DIR/.build/xcode"
 XCODE_APP_DIR="$DERIVED_DATA_DIR/Build/Products/Release/$APP_NAME"
 RESOURCES_DIR="$APP_DIR/Contents/Resources"
 XCODE_RESOURCES_DIR="$XCODE_APP_DIR/Contents/Resources"
-WIDGET_APPEX_DIR="$APP_DIR/Contents/PlugIns/StandUpReminderWidgetExtension.appex"
-XCODE_WIDGET_APPEX_DIR="$XCODE_APP_DIR/Contents/PlugIns/StandUpReminderWidgetExtension.appex"
-WIDGET_RESOURCES_DIR="$WIDGET_APPEX_DIR/Contents/Resources"
-XCODE_WIDGET_RESOURCES_DIR="$XCODE_WIDGET_APPEX_DIR/Contents/Resources"
 ICON_SOURCE_SCRIPT="$ROOT_DIR/scripts/generate-icon.swift"
 ICON_MASTER_PNG="$ROOT_DIR/.build/AppIcon-1024.png"
 ICONSET_DIR="$ROOT_DIR/.build/AppIcon.iconset"
 ICNS_PATH="$ROOT_DIR/.build/AppIcon.icns"
 APP_ENTITLEMENTS="$ROOT_DIR/App/StandUpReminder.entitlements"
-WIDGET_ENTITLEMENTS="$ROOT_DIR/Widget/StandUpReminderWidgetExtension.entitlements"
 APP_REQUIREMENTS='=designated => identifier "com.haotingyi.standupreminder"'
-WIDGET_REQUIREMENTS='=designated => identifier "com.haotingyi.standupreminder.widget"'
 
 set_icon_plist_key() {
   local plist_path="$1"
@@ -35,7 +29,7 @@ set_icon_plist_key() {
 echo "Generating Xcode project..."
 xcodegen generate --spec "$PROJECT_SPEC"
 
-echo "Building app + widget (Release)..."
+echo "Building app (Release)..."
 xcodebuild \
   -project "$PROJECT_FILE" \
   -scheme StandUpReminder \
@@ -49,8 +43,6 @@ rm -rf "$APP_DIR"
 cp -R "$XCODE_APP_DIR" "$APP_DIR"
 mkdir -p "$RESOURCES_DIR"
 mkdir -p "$XCODE_RESOURCES_DIR"
-mkdir -p "$WIDGET_RESOURCES_DIR"
-mkdir -p "$XCODE_WIDGET_RESOURCES_DIR"
 
 echo "Generating icon..."
 swift "$ICON_SOURCE_SCRIPT" "$ICON_MASTER_PNG"
@@ -71,18 +63,9 @@ cp "$ICON_MASTER_PNG" "$ICONSET_DIR/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
 cp "$ICNS_PATH" "$RESOURCES_DIR/AppIcon.icns"
 cp "$ICNS_PATH" "$XCODE_RESOURCES_DIR/AppIcon.icns"
-cp "$ICNS_PATH" "$WIDGET_RESOURCES_DIR/AppIcon.icns"
-cp "$ICNS_PATH" "$XCODE_WIDGET_RESOURCES_DIR/AppIcon.icns"
 
 set_icon_plist_key "$APP_DIR/Contents/Info.plist"
 set_icon_plist_key "$XCODE_APP_DIR/Contents/Info.plist"
-set_icon_plist_key "$WIDGET_APPEX_DIR/Contents/Info.plist"
-set_icon_plist_key "$XCODE_WIDGET_APPEX_DIR/Contents/Info.plist"
-
-echo "Signing widget extension (ad-hoc + entitlements)..."
-codesign --force --sign - --entitlements "$WIDGET_ENTITLEMENTS" \
-  --requirements "$WIDGET_REQUIREMENTS" \
-  "$APP_DIR/Contents/PlugIns/StandUpReminderWidgetExtension.appex"
 
 echo "Signing app bundle (ad-hoc + entitlements)..."
 codesign --force --sign - --entitlements "$APP_ENTITLEMENTS" \
@@ -92,7 +75,9 @@ codesign --force --sign - --entitlements "$APP_ENTITLEMENTS" \
 echo "Unregistering derived app from LaunchServices..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
   -u "$XCODE_APP_DIR" >/dev/null 2>&1 || true
-pkill -f "$XCODE_APP_DIR/Contents/MacOS/StandUpReminder" >/dev/null 2>&1 || true
+
+echo "Stopping running app instances..."
+pkill -x "StandUpReminder" >/dev/null 2>&1 || true
 
 echo "Registering dist app with LaunchServices..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \

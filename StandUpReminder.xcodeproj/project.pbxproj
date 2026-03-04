@@ -7,71 +7,38 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		168FF2A4F446607F26D4E460 /* StandUpReminderWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		1C9412A6AB68E3A62895EC29 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
 		317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */; };
 		4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */; };
 		5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD68F48786509C349657A3BC /* AssistantModels.swift */; };
 		5EBF201A4258A70F3473A5D7 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
-		7428F3DE3EEDEBC881F6C459 /* StandUpReminderWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */; };
 		8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */; };
+		94BA6764EE636A7D9C81D341 /* MouseMoverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64A6EC9D6C706B69652AADD /* MouseMoverService.swift */; };
+		97D719C4C3997851941825E9 /* MenuBarMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C5301B6614357672D49242 /* MenuBarMenuView.swift */; };
+		BFFF9E87418569391991BED1 /* MenuBarTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */; };
 		EA2EA5DED68BCE84DDEA78F1 /* ReminderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */; };
 		F13801F0D981C5510AFD65AA /* StandUpReminderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		CB56D8EFF69F77B34C72D0E1 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = D91D2A39003460E3D106527F /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 017E6705B8F0B93EF23D7F17;
-			remoteInfo = StandUpReminderWidgetExtension;
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		EC1AB96ADC539430B0A2EDF3 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				168FF2A4F446607F26D4E460 /* StandUpReminderWidgetExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
-		13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandUpReminderWidget.swift; sourceTree = "<group>"; };
-		2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StandUpReminderWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
+		84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarTodayView.swift; sourceTree = "<group>"; };
 		8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A0510F94E70390EDC1F12533 /* StandUpReminder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StandUpReminder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandUpReminderApp.swift; sourceTree = "<group>"; };
 		BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSettings.swift; sourceTree = "<group>"; };
+		C64A6EC9D6C706B69652AADD /* MouseMoverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseMoverService.swift; sourceTree = "<group>"; };
 		CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderViewModel.swift; sourceTree = "<group>"; };
 		F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = logo_chibi.png; sourceTree = "<group>"; };
+		F5C5301B6614357672D49242 /* MenuBarMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenuView.swift; sourceTree = "<group>"; };
 		FD68F48786509C349657A3BC /* AssistantModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		614A553A74B532E18502F3B4 /* StandUpReminderWidget */ = {
-			isa = PBXGroup;
-			children = (
-				13E7C3A2BDECC9433F4D295A /* StandUpReminderWidget.swift */,
-			);
-			name = StandUpReminderWidget;
-			path = Sources/StandUpReminderWidget;
-			sourceTree = "<group>";
-		};
 		7949DE6E35E54362FB310E08 = {
 			isa = PBXGroup;
 			children = (
 				AB42D4D651D0480A5A38F7C6 /* Resources */,
 				C6773DDAB80C1F06E3229983 /* StandUpReminder */,
-				614A553A74B532E18502F3B4 /* StandUpReminderWidget */,
 				960917D5C6A58291E0AACCB7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -80,7 +47,6 @@
 			isa = PBXGroup;
 			children = (
 				A0510F94E70390EDC1F12533 /* StandUpReminder.app */,
-				2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -98,6 +64,9 @@
 			children = (
 				FD68F48786509C349657A3BC /* AssistantModels.swift */,
 				8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */,
+				F5C5301B6614357672D49242 /* MenuBarMenuView.swift */,
+				84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */,
+				C64A6EC9D6C706B69652AADD /* MouseMoverService.swift */,
 				53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */,
 				BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */,
 				CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */,
@@ -110,36 +79,16 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		017E6705B8F0B93EF23D7F17 /* StandUpReminderWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 56469E5985057A315E9BC6F6 /* Build configuration list for PBXNativeTarget "StandUpReminderWidgetExtension" */;
-			buildPhases = (
-				9AAEDF36B71147C70EDC4B32 /* Sources */,
-				66D05BC434BEE7094F5F4B48 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = StandUpReminderWidgetExtension;
-			packageProductDependencies = (
-			);
-			productName = StandUpReminderWidgetExtension;
-			productReference = 2D8C618CC5CAC87421E6CA31 /* StandUpReminderWidgetExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 		F74CF7C291BF554AC6D3112A /* StandUpReminder */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 9D3740B21D3A07AEFAD93C06 /* Build configuration list for PBXNativeTarget "StandUpReminder" */;
 			buildPhases = (
 				4CF54DCBF7B637ED366E7BD1 /* Sources */,
 				D0D71A80B6159EE6340952B6 /* Resources */,
-				EC1AB96ADC539430B0A2EDF3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				FCE38C48CBDBF9389C6009D5 /* PBXTargetDependency */,
 			);
 			name = StandUpReminder;
 			packageProductDependencies = (
@@ -172,20 +121,11 @@
 			projectRoot = "";
 			targets = (
 				F74CF7C291BF554AC6D3112A /* StandUpReminder */,
-				017E6705B8F0B93EF23D7F17 /* StandUpReminderWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		66D05BC434BEE7094F5F4B48 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1C9412A6AB68E3A62895EC29 /* logo_chibi.png in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		D0D71A80B6159EE6340952B6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -203,6 +143,9 @@
 			files = (
 				5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */,
 				317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */,
+				97D719C4C3997851941825E9 /* MenuBarMenuView.swift in Sources */,
+				BFFF9E87418569391991BED1 /* MenuBarTodayView.swift in Sources */,
+				94BA6764EE636A7D9C81D341 /* MouseMoverService.swift in Sources */,
 				8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */,
 				4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */,
 				EA2EA5DED68BCE84DDEA78F1 /* ReminderViewModel.swift in Sources */,
@@ -210,43 +153,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9AAEDF36B71147C70EDC4B32 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				7428F3DE3EEDEBC881F6C459 /* StandUpReminderWidget.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		FCE38C48CBDBF9389C6009D5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 017E6705B8F0B93EF23D7F17 /* StandUpReminderWidgetExtension */;
-			targetProxy = CB56D8EFF69F77B34C72D0E1 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
-		2613ABA2D405C9E004615332 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGNING_ALLOWED = NO;
-				COMBINE_HIDPI_IMAGES = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Widget/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.haotingyi.standupreminder.widget;
-				PRODUCT_NAME = StandUpReminderWidgetExtension;
-				SDKROOT = macosx;
-			};
-			name = Release;
-		};
 		6AEF00531E4A33197CED4B8E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -384,24 +293,6 @@
 			};
 			name = Debug;
 		};
-		8F499CC0E1EB5C1A84970AA8 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGNING_ALLOWED = NO;
-				COMBINE_HIDPI_IMAGES = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Widget/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.haotingyi.standupreminder.widget;
-				PRODUCT_NAME = StandUpReminderWidgetExtension;
-				SDKROOT = macosx;
-			};
-			name = Debug;
-		};
 		CEE1C8E0332D21FFBE18BC28 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -423,15 +314,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		56469E5985057A315E9BC6F6 /* Build configuration list for PBXNativeTarget "StandUpReminderWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8F499CC0E1EB5C1A84970AA8 /* Debug */,
-				2613ABA2D405C9E004615332 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
 		9D3740B21D3A07AEFAD93C06 /* Build configuration list for PBXNativeTarget "StandUpReminder" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
