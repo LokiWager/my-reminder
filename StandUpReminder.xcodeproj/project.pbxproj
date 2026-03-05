@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		103EBD1E823007A76FBC626C /* menubar_icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 35198ACD41994F53BA36B6B9 /* menubar_icon.png */; };
 		317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */; };
+		42A3709A834A5F6936860165 /* AppBuildInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64E9FC30A537CB6D46E31824 /* AppBuildInfo.swift */; };
 		4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */; };
 		5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD68F48786509C349657A3BC /* AssistantModels.swift */; };
 		5EBF201A4258A70F3473A5D7 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
@@ -23,6 +24,7 @@
 /* Begin PBXFileReference section */
 		35198ACD41994F53BA36B6B9 /* menubar_icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = menubar_icon.png; sourceTree = "<group>"; };
 		53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
+		64E9FC30A537CB6D46E31824 /* AppBuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuildInfo.swift; sourceTree = "<group>"; };
 		84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarTodayView.swift; sourceTree = "<group>"; };
 		8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A0510F94E70390EDC1F12533 /* StandUpReminder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StandUpReminder.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -65,6 +67,7 @@
 		C6773DDAB80C1F06E3229983 /* StandUpReminder */ = {
 			isa = PBXGroup;
 			children = (
+				64E9FC30A537CB6D46E31824 /* AppBuildInfo.swift */,
 				FD68F48786509C349657A3BC /* AssistantModels.swift */,
 				8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */,
 				F5C5301B6614357672D49242 /* MenuBarMenuView.swift */,
@@ -145,6 +148,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				42A3709A834A5F6936860165 /* AppBuildInfo.swift in Sources */,
 				5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */,
 				317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */,
 				97D719C4C3997851941825E9 /* MenuBarMenuView.swift in Sources */,

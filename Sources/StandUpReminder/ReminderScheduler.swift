@@ -10,12 +10,13 @@ struct CalendarNotificationItem: Sendable {
 
 final class ReminderScheduler: @unchecked Sendable {
     private let center = UNUserNotificationCenter.current()
+    private let runtimeQueue = DispatchQueue(label: "com.haotingyi.standupreminder.runtime-scheduler")
     private let identifierPrefix = "standup-reminder-"
     private let calendarIdentifierPrefix = "standup-reminder-calendar-"
-    // Keep request volume safely below usernotificationsd limits to avoid silent drops.
-    private let maxPendingBudget = 64
-    private let calendarRequestBudget = 8
-    private let reservedRequestSlots = 2
+    private let clearRetryDelay: TimeInterval = 0.2
+    private let clearRetryAttempts = 40
+    private let runtimeTimerLeeway: DispatchTimeInterval = .milliseconds(400)
+    private let runtimeDueTolerance: TimeInterval = 0.8
 
     private struct NotificationPlan {
         let identifier: String
@@ -27,23 +28,156 @@ final class ReminderScheduler: @unchecked Sendable {
         let minute: Int
     }
 
-    private final class FailureCounter: @unchecked Sendable {
-        private var value = 0
-        private let lock = NSLock()
+    private struct ScheduledOccurrence {
+        let fireDate: Date
+        let plan: NotificationPlan
+        let sequence: UInt64
+    }
 
-        func increment() {
-            lock.lock()
-            value += 1
-            lock.unlock()
+    private struct CalendarScheduledOccurrence {
+        let fireDate: Date
+        let identifier: String
+        let title: String
+        let body: String
+        let sequence: UInt64
+    }
+
+    private struct OccurrenceHeap {
+        private(set) var storage: [ScheduledOccurrence] = []
+
+        var count: Int { storage.count }
+
+        func peek() -> ScheduledOccurrence? { storage.first }
+
+        mutating func removeAll() {
+            storage.removeAll(keepingCapacity: false)
         }
 
-        func current() -> Int {
-            lock.lock()
-            let v = value
-            lock.unlock()
-            return v
+        mutating func push(_ value: ScheduledOccurrence) {
+            storage.append(value)
+            siftUp(from: storage.count - 1)
+        }
+
+        mutating func popMin() -> ScheduledOccurrence? {
+            guard !storage.isEmpty else { return nil }
+            if storage.count == 1 {
+                return storage.removeLast()
+            }
+
+            let first = storage[0]
+            storage[0] = storage.removeLast()
+            siftDown(from: 0)
+            return first
+        }
+
+        private mutating func siftUp(from index: Int) {
+            var child = index
+            while child > 0 {
+                let parent = (child - 1) / 2
+                guard Self.isHigherPriority(storage[child], than: storage[parent]) else { return }
+                storage.swapAt(child, parent)
+                child = parent
+            }
+        }
+
+        private mutating func siftDown(from index: Int) {
+            var parent = index
+            while true {
+                let left = (parent * 2) + 1
+                let right = left + 1
+                var best = parent
+
+                if left < storage.count, Self.isHigherPriority(storage[left], than: storage[best]) {
+                    best = left
+                }
+                if right < storage.count, Self.isHigherPriority(storage[right], than: storage[best]) {
+                    best = right
+                }
+
+                guard best != parent else { return }
+                storage.swapAt(parent, best)
+                parent = best
+            }
+        }
+
+        private static func isHigherPriority(_ lhs: ScheduledOccurrence, than rhs: ScheduledOccurrence) -> Bool {
+            if lhs.fireDate != rhs.fireDate {
+                return lhs.fireDate < rhs.fireDate
+            }
+            return lhs.sequence < rhs.sequence
         }
     }
+
+    private struct CalendarOccurrenceHeap {
+        private(set) var storage: [CalendarScheduledOccurrence] = []
+
+        func peek() -> CalendarScheduledOccurrence? { storage.first }
+
+        mutating func removeAll() {
+            storage.removeAll(keepingCapacity: false)
+        }
+
+        mutating func push(_ value: CalendarScheduledOccurrence) {
+            storage.append(value)
+            siftUp(from: storage.count - 1)
+        }
+
+        mutating func popMin() -> CalendarScheduledOccurrence? {
+            guard !storage.isEmpty else { return nil }
+            if storage.count == 1 {
+                return storage.removeLast()
+            }
+
+            let first = storage[0]
+            storage[0] = storage.removeLast()
+            siftDown(from: 0)
+            return first
+        }
+
+        private mutating func siftUp(from index: Int) {
+            var child = index
+            while child > 0 {
+                let parent = (child - 1) / 2
+                guard Self.isHigherPriority(storage[child], than: storage[parent]) else { return }
+                storage.swapAt(child, parent)
+                child = parent
+            }
+        }
+
+        private mutating func siftDown(from index: Int) {
+            var parent = index
+            while true {
+                let left = (parent * 2) + 1
+                let right = left + 1
+                var best = parent
+
+                if left < storage.count, Self.isHigherPriority(storage[left], than: storage[best]) {
+                    best = left
+                }
+                if right < storage.count, Self.isHigherPriority(storage[right], than: storage[best]) {
+                    best = right
+                }
+
+                guard best != parent else { return }
+                storage.swapAt(parent, best)
+                parent = best
+            }
+        }
+
+        private static func isHigherPriority(_ lhs: CalendarScheduledOccurrence, than rhs: CalendarScheduledOccurrence) -> Bool {
+            if lhs.fireDate != rhs.fireDate {
+                return lhs.fireDate < rhs.fireDate
+            }
+            return lhs.sequence < rhs.sequence
+        }
+    }
+
+    private var runtimeHeap = OccurrenceHeap()
+    private var runtimeTimer: DispatchSourceTimer?
+    private var nextRuntimeSequence: UInt64 = 0
+    private var calendarHeap = CalendarOccurrenceHeap()
+    private var calendarTimer: DispatchSourceTimer?
+    private var nextCalendarSequence: UInt64 = 0
 
     func requestPermission(completion: @escaping @Sendable (Bool, String?) -> Void) {
         center.requestAuthorization(options: [.alert, .sound]) { granted, error in
@@ -62,12 +196,15 @@ final class ReminderScheduler: @unchecked Sendable {
     }
 
     func clearAll(completion: (@Sendable () -> Void)? = nil) {
-        center.getPendingNotificationRequests { [weak self] _ in
-            guard let self else { return }
-            // Remove every pending request for this app to prevent duplicate alerts
-            // from older identifier formats or previously built app variants.
-            self.center.removeAllPendingNotificationRequests()
-            self.center.removeAllDeliveredNotifications()
+        stopAllInProcessSchedulers()
+        // Remove every pending request for this app to prevent duplicate alerts
+        // from older identifier formats or previously built app variants.
+        center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
+        waitForPendingRequestsToClear(
+            attemptsLeft: clearRetryAttempts,
+            filter: { _ in true }
+        ) {
             completion?()
         }
     }
@@ -79,81 +216,24 @@ final class ReminderScheduler: @unchecked Sendable {
     ) {
         clearCalendarNotifications { [weak self] in
             guard let self else { return }
-
-            let now = Date()
-            let validLeadMinutes = max(0, leadMinutes)
-            let calendar = Calendar.current
-            let requests: [UNNotificationRequest] = items.compactMap { item in
-                let targetFireDate: Date
-                if item.isAllDay {
-                    let dayStart = calendar.startOfDay(for: item.startDate)
-                    targetFireDate = calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
+            // Calendar reminders are always 5 minutes before the event.
+            _ = leadMinutes
+            let validLeadMinutes = 5
+            self.armCalendarInProcessScheduler(items: items, leadMinutes: validLeadMinutes) { armedCount in
+                if armedCount == 0 {
+                    completion("No upcoming calendar reminders to arm.")
                 } else {
-                    targetFireDate = item.startDate.addingTimeInterval(TimeInterval(-60 * validLeadMinutes))
-                }
-                let fireDate: Date
-                if targetFireDate > now {
-                    fireDate = targetFireDate
-                } else {
-                    // If already inside the lead window but event has not started,
-                    // fire quickly instead of dropping this reminder.
-                    guard item.startDate > now else { return nil }
-                    fireDate = now.addingTimeInterval(5)
-                }
-
-                let content = UNMutableNotificationContent()
-                content.title = item.title
-                content.body = "Starting soon in \(validLeadMinutes) minutes."
-                content.threadIdentifier = "calendar-reminders"
-                content.categoryIdentifier = "standup.category"
-                content.sound = .default
-
-                var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
-                components.second = 0
-                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-                let request = UNNotificationRequest(
-                    identifier: "\(self.calendarIdentifierPrefix)\(abs(item.eventID.hashValue))-\(Int(item.startDate.timeIntervalSince1970))",
-                    content: content,
-                    trigger: trigger
-                )
-                return request
-            }
-
-            guard !requests.isEmpty else {
-                completion("No upcoming calendar notifications to schedule.")
-                return
-            }
-
-            let cappedRequests = Array(requests.prefix(calendarRequestBudget))
-            let group = DispatchGroup()
-            let counter = FailureCounter()
-
-            for request in cappedRequests {
-                group.enter()
-                self.center.add(request) { error in
-                    if error != nil {
-                        counter.increment()
-                    }
-                    group.leave()
-                }
-            }
-
-            group.notify(queue: .main) {
-                let failures = counter.current()
-                if failures == 0 {
-                    if requests.count > cappedRequests.count {
-                        completion("Scheduled \(cappedRequests.count)/\(requests.count) calendar reminders (system limit).")
-                    } else {
-                        completion("Scheduled \(cappedRequests.count) calendar reminders.")
-                    }
-                } else {
-                    completion("Scheduled \(cappedRequests.count - failures)/\(cappedRequests.count) calendar reminders.")
+                    completion("Armed \(armedCount) calendar reminders (\(validLeadMinutes)-minute lead).")
                 }
             }
         }
     }
 
     func clearCalendarNotifications(completion: (@Sendable () -> Void)? = nil) {
+        runtimeQueue.sync {
+            cancelCalendarTimerLocked()
+            calendarHeap.removeAll()
+        }
         center.getPendingNotificationRequests { [weak self] requests in
             guard let self else { return }
             let ids = requests
@@ -161,7 +241,35 @@ final class ReminderScheduler: @unchecked Sendable {
                 .filter { $0.hasPrefix(self.calendarIdentifierPrefix) }
             self.center.removePendingNotificationRequests(withIdentifiers: ids)
             self.center.removeDeliveredNotifications(withIdentifiers: ids)
-            completion?()
+            self.waitForPendingRequestsToClear(
+                attemptsLeft: self.clearRetryAttempts,
+                filter: { $0.identifier.hasPrefix(self.calendarIdentifierPrefix) }
+            ) {
+                completion?()
+            }
+        }
+    }
+
+    private func waitForPendingRequestsToClear(
+        attemptsLeft: Int,
+        filter: @escaping @Sendable (UNNotificationRequest) -> Bool,
+        completion: @escaping @Sendable () -> Void
+    ) {
+        center.getPendingNotificationRequests { [weak self] requests in
+            guard let self else { return }
+            let remaining = requests.filter(filter)
+            if remaining.isEmpty || attemptsLeft <= 0 {
+                completion()
+                return
+            }
+            self.center.removePendingNotificationRequests(withIdentifiers: remaining.map(\.identifier))
+            DispatchQueue.global().asyncAfter(deadline: .now() + self.clearRetryDelay) { [weak self] in
+                self?.waitForPendingRequestsToClear(
+                    attemptsLeft: attemptsLeft - 1,
+                    filter: filter,
+                    completion: completion
+                )
+            }
         }
     }
 
@@ -216,62 +324,259 @@ final class ReminderScheduler: @unchecked Sendable {
                 completion("Too many reminders (\(plans.count)). Reduce periods or custom reminders.")
                 return
             }
-
-            let weeklyRequestBudget = max(1, maxPendingBudget - calendarRequestBudget - reservedRequestSlots)
-            let now = Date()
-            let prioritizedPlans = plans.sorted { lhs, rhs in
-                let leftDate = self.nextTriggerDate(for: lhs, now: now) ?? .distantFuture
-                let rightDate = self.nextTriggerDate(for: rhs, now: now) ?? .distantFuture
-                if leftDate != rightDate {
-                    return leftDate < rightDate
-                }
-                if lhs.threadIdentifier != rhs.threadIdentifier {
-                    return lhs.threadIdentifier == "custom-reminders"
-                }
-                return lhs.identifier < rhs.identifier
-            }
-            let selectedPlans = Array(prioritizedPlans.prefix(weeklyRequestBudget))
-
-            let group = DispatchGroup()
-            let counter = FailureCounter()
-
-            for plan in selectedPlans {
-                let content = UNMutableNotificationContent()
-                content.title = plan.title
-                content.body = plan.body
-                content.threadIdentifier = plan.threadIdentifier
-                content.categoryIdentifier = "standup.category"
-                content.sound = .default
-
-                var components = DateComponents()
-                components.weekday = plan.weekday
-                components.hour = plan.hour
-                components.minute = plan.minute
-
-                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-                let request = UNNotificationRequest(identifier: plan.identifier, content: content, trigger: trigger)
-
-                group.enter()
-                center.add(request) { error in
-                    if error != nil {
-                        counter.increment()
-                    }
-                    group.leave()
-                }
-            }
-
-            group.notify(queue: .main) {
-                let failures = counter.current()
-                if failures == 0 {
-                    if selectedPlans.count < plans.count {
-                        completion("Scheduled \(selectedPlans.count)/\(plans.count) weekly reminders (system limit).")
-                    } else {
-                        completion("Scheduled \(selectedPlans.count) weekly reminders.")
-                    }
+            self.armInProcessScheduler(with: plans) { armedCount in
+                if armedCount == 0 {
+                    completion("No upcoming reminders found in current schedule.")
                 } else {
-                    completion("Scheduled \(selectedPlans.count - failures)/\(selectedPlans.count) reminders.")
+                    completion("Armed \(armedCount) in-process reminders.")
                 }
             }
+        }
+    }
+
+    private func armInProcessScheduler(
+        with plans: [NotificationPlan],
+        completion: @escaping @Sendable (Int) -> Void
+    ) {
+        runtimeQueue.async { [weak self] in
+            guard let self else { return }
+            self.cancelRuntimeTimerLocked()
+            self.runtimeHeap.removeAll()
+
+            let now = Date()
+            var armedCount = 0
+
+            for plan in plans {
+                guard let fireDate = self.nextTriggerDate(for: plan, now: now.addingTimeInterval(-1)) else {
+                    continue
+                }
+                self.runtimeHeap.push(
+                    ScheduledOccurrence(
+                        fireDate: fireDate,
+                        plan: plan,
+                        sequence: self.nextSequenceLocked()
+                    )
+                )
+                armedCount += 1
+            }
+
+            self.scheduleNextRuntimeTimerLocked()
+            DispatchQueue.main.async {
+                completion(armedCount)
+            }
+        }
+    }
+
+    private func stopAllInProcessSchedulers() {
+        runtimeQueue.sync {
+            cancelRuntimeTimerLocked()
+            runtimeHeap.removeAll()
+            cancelCalendarTimerLocked()
+            calendarHeap.removeAll()
+        }
+    }
+
+    private func nextSequenceLocked() -> UInt64 {
+        defer { nextRuntimeSequence &+= 1 }
+        return nextRuntimeSequence
+    }
+
+    private func cancelRuntimeTimerLocked() {
+        runtimeTimer?.setEventHandler {}
+        runtimeTimer?.cancel()
+        runtimeTimer = nil
+    }
+
+    private func cancelCalendarTimerLocked() {
+        calendarTimer?.setEventHandler {}
+        calendarTimer?.cancel()
+        calendarTimer = nil
+    }
+
+    private func scheduleNextRuntimeTimerLocked() {
+        cancelRuntimeTimerLocked()
+        guard let next = runtimeHeap.peek() else { return }
+
+        let delay = max(0, next.fireDate.timeIntervalSinceNow)
+        let timer = DispatchSource.makeTimerSource(queue: runtimeQueue)
+        timer.schedule(
+            deadline: .now() + delay,
+            repeating: .never,
+            leeway: runtimeTimerLeeway
+        )
+        timer.setEventHandler { [weak self] in
+            self?.processDueOccurrencesLocked()
+        }
+        runtimeTimer = timer
+        timer.resume()
+    }
+
+    private func processDueOccurrencesLocked() {
+        let now = Date()
+        let dueDeadline = now.addingTimeInterval(runtimeDueTolerance)
+
+        while let next = runtimeHeap.peek(), next.fireDate <= dueDeadline {
+            _ = runtimeHeap.popMin()
+            deliverImmediateNotification(plan: next.plan, scheduledAt: next.fireDate)
+
+            // Re-arm from "now" so wake-from-sleep does not spam every missed slot.
+            if let following = nextTriggerDate(for: next.plan, now: now) {
+                runtimeHeap.push(
+                    ScheduledOccurrence(
+                        fireDate: following,
+                        plan: next.plan,
+                        sequence: nextSequenceLocked()
+                    )
+                )
+            }
+        }
+
+        scheduleNextRuntimeTimerLocked()
+    }
+
+    private func armCalendarInProcessScheduler(
+        items: [CalendarNotificationItem],
+        leadMinutes: Int,
+        completion: @escaping @Sendable (Int) -> Void
+    ) {
+        runtimeQueue.async { [weak self] in
+            guard let self else { return }
+            self.cancelCalendarTimerLocked()
+            self.calendarHeap.removeAll()
+
+            let now = Date()
+            let calendar = Calendar.current
+            var armedCount = 0
+
+            for item in items {
+                let targetFireDate: Date
+                if item.isAllDay {
+                    let dayStart = calendar.startOfDay(for: item.startDate)
+                    targetFireDate = calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
+                } else {
+                    targetFireDate = item.startDate.addingTimeInterval(TimeInterval(-60 * leadMinutes))
+                }
+
+                let fireDate: Date
+                if targetFireDate > now {
+                    fireDate = targetFireDate
+                } else {
+                    // If already inside the lead window but event has not started,
+                    // fire quickly instead of dropping this reminder.
+                    guard item.startDate > now else { continue }
+                    fireDate = now.addingTimeInterval(5)
+                }
+
+                let occurrence = CalendarScheduledOccurrence(
+                    fireDate: fireDate,
+                    identifier: "\(self.calendarIdentifierPrefix)\(abs(item.eventID.hashValue))-\(Int(item.startDate.timeIntervalSince1970))",
+                    title: item.title,
+                    body: "Starting soon in \(leadMinutes) minutes.",
+                    sequence: self.nextCalendarSequenceLocked()
+                )
+                self.calendarHeap.push(occurrence)
+                armedCount += 1
+            }
+
+            self.scheduleNextCalendarTimerLocked()
+            DispatchQueue.main.async {
+                completion(armedCount)
+            }
+        }
+    }
+
+    private func nextCalendarSequenceLocked() -> UInt64 {
+        defer { nextCalendarSequence &+= 1 }
+        return nextCalendarSequence
+    }
+
+    private func scheduleNextCalendarTimerLocked() {
+        cancelCalendarTimerLocked()
+        guard let next = calendarHeap.peek() else { return }
+
+        let delay = max(0, next.fireDate.timeIntervalSinceNow)
+        let timer = DispatchSource.makeTimerSource(queue: runtimeQueue)
+        timer.schedule(
+            deadline: .now() + delay,
+            repeating: .never,
+            leeway: runtimeTimerLeeway
+        )
+        timer.setEventHandler { [weak self] in
+            self?.processDueCalendarOccurrencesLocked()
+        }
+        calendarTimer = timer
+        timer.resume()
+    }
+
+    private func processDueCalendarOccurrencesLocked() {
+        let now = Date()
+        let dueDeadline = now.addingTimeInterval(runtimeDueTolerance)
+
+        while let next = calendarHeap.peek(), next.fireDate <= dueDeadline {
+            _ = calendarHeap.popMin()
+            deliverImmediateCalendarNotification(occurrence: next)
+        }
+
+        scheduleNextCalendarTimerLocked()
+    }
+
+    private func deliverImmediateNotification(plan: NotificationPlan, scheduledAt: Date) {
+        let content = UNMutableNotificationContent()
+        content.title = plan.title
+        content.body = plan.body
+        content.threadIdentifier = plan.threadIdentifier
+        content.categoryIdentifier = "standup.category"
+        content.sound = .default
+
+        let requestIdentifier = "\(plan.identifier)-fired-\(Int(scheduledAt.timeIntervalSince1970))"
+        enqueueImmediateNotification(
+            identifier: requestIdentifier,
+            content: content,
+            dedupeDeliveredThread: plan.threadIdentifier == "standup-reminders" ? plan.threadIdentifier : nil
+        )
+    }
+
+    private func deliverImmediateCalendarNotification(occurrence: CalendarScheduledOccurrence) {
+        let content = UNMutableNotificationContent()
+        content.title = occurrence.title
+        content.body = occurrence.body
+        content.threadIdentifier = "calendar-reminders"
+        content.categoryIdentifier = "standup.category"
+        content.sound = .default
+
+        let requestIdentifier = "\(occurrence.identifier)-fired-\(Int(occurrence.fireDate.timeIntervalSince1970))"
+        enqueueImmediateNotification(
+            identifier: requestIdentifier,
+            content: content,
+            dedupeDeliveredThread: nil
+        )
+    }
+
+    private func enqueueImmediateNotification(
+        identifier: String,
+        content: UNMutableNotificationContent,
+        dedupeDeliveredThread: String?
+    ) {
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: nil
+        )
+
+        guard let dedupeDeliveredThread else {
+            center.add(request)
+            return
+        }
+
+        center.getDeliveredNotifications { [center] delivered in
+            let staleIDs = delivered
+                .filter { $0.request.content.threadIdentifier == dedupeDeliveredThread }
+                .map(\.request.identifier)
+
+            if !staleIDs.isEmpty {
+                center.removeDeliveredNotifications(withIdentifiers: staleIDs)
+            }
+            center.add(request)
         }
     }
 
@@ -285,12 +590,14 @@ final class ReminderScheduler: @unchecked Sendable {
         for (dayIndex, weekday) in weekdayMap.enumerated() {
             guard settings.activeDays.indices.contains(dayIndex), settings.activeDays[dayIndex] else { continue }
 
-            for (slotIndex, minute) in standSlots.enumerated() {
+            for minute in standSlots {
                 let hour = minute / 60
                 let min = minute % 60
                 plans.append(
                     NotificationPlan(
-                        identifier: "\(identifierPrefix)stand-\(dayIndex)-\(slotIndex)-\(hour)-\(min)",
+                        // Keep identifiers stable for the same weekday/time slot so repeated
+                        // scheduling from different app states cannot create duplicate requests.
+                        identifier: "\(identifierPrefix)stand-\(dayIndex)-\(hour)-\(min)",
                         title: "Stand Up Reminder",
                         body: "Time to stand up and take a \(settings.standMinutes)-minute break.",
                         threadIdentifier: "standup-reminders",
@@ -302,7 +609,7 @@ final class ReminderScheduler: @unchecked Sendable {
             }
         }
 
-        for (reminderIndex, reminder) in settings.extraReminders.enumerated() where reminder.isEnabled {
+        for reminder in settings.extraReminders where reminder.isEnabled {
             let trimmedTitle = reminder.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedTitle.isEmpty else { continue }
             let reminderDays = reminder.activeDays.count == 7 ? reminder.activeDays : ReminderSettings.default.activeDays
@@ -314,7 +621,9 @@ final class ReminderScheduler: @unchecked Sendable {
 
                 plans.append(
                     NotificationPlan(
-                        identifier: "\(identifierPrefix)custom-\(reminderIndex)-\(dayIndex)-\(hour)-\(minute)",
+                        // Use reminder UUID rather than array index to keep IDs stable if the
+                        // list order changes or reminders are inserted.
+                        identifier: "\(identifierPrefix)custom-\(reminder.id.uuidString)-\(dayIndex)-\(hour)-\(minute)",
                         title: trimmedTitle,
                         body: customReminderBody(for: trimmedTitle),
                         threadIdentifier: "custom-reminders",

@@ -112,6 +112,7 @@ private struct ExtraReminderDraft: Identifiable, Equatable {
 
 struct ContentView: View {
     @EnvironmentObject private var viewModel: ReminderViewModel
+    private let buildInfo = AppBuildInfo.current
 
     @State private var selection: AppSection? = .today
     @State private var periods: [PeriodDraft] = [
@@ -329,6 +330,21 @@ struct ContentView: View {
                                 items: shoppingPreview
                             )
                         }
+                    }
+
+                    GroupBox("Runtime Version") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(buildInfo.summaryLine)
+                                .font(.subheadline.weight(.semibold))
+                            Text(buildInfo.detailLine)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                            Text("Build Time: \(buildInfo.timestamp)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(24)
@@ -584,7 +600,7 @@ struct ContentView: View {
                         }
 
                         Text(viewModel.settings.isMouseMoverEnabled
-                             ? "No input for \(viewModel.settings.mouseMoverIdleThresholdMinutes) min, then move once every \(viewModel.settings.mouseMoverMoveIntervalMinutes) min."
+                             ? "No input for \(viewModel.settings.mouseMoverIdleThresholdMinutes) min, then move once every \(viewModel.settings.mouseMoverMoveIntervalMinutes) min. Display idle sleep is also prevented while enabled."
                              : "Mouse mover is off.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)

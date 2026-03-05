@@ -16,6 +16,18 @@ ICONSET_DIR="$ROOT_DIR/.build/AppIcon.iconset"
 ICNS_PATH="$ROOT_DIR/.build/AppIcon.icns"
 APP_ENTITLEMENTS="$ROOT_DIR/App/StandUpReminder.entitlements"
 APP_REQUIREMENTS='=designated => identifier "com.haotingyi.standupreminder"'
+BUILD_TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
+  if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+    BUILD_DIRTY_SUFFIX="-dirty"
+  else
+    BUILD_DIRTY_SUFFIX=""
+  fi
+else
+  BUILD_COMMIT="unknown"
+  BUILD_DIRTY_SUFFIX=""
+fi
 
 set_icon_plist_key() {
   local plist_path="$1"
@@ -24,6 +36,32 @@ set_icon_plist_key() {
   else
     /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$plist_path"
   fi
+}
+
+set_or_add_plist_string() {
+  local plist_path="$1"
+  local key="$2"
+  local value="$3"
+  if /usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Set :$key $value" "$plist_path"
+  else
+    /usr/libexec/PlistBuddy -c "Add :$key string $value" "$plist_path"
+  fi
+}
+
+set_build_metadata() {
+  local plist_path="$1"
+  local short_version
+  local bundle_version
+  local build_id
+
+  short_version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist_path" 2>/dev/null || echo 0)"
+  bundle_version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist_path" 2>/dev/null || echo 0)"
+  build_id="v${short_version}(${bundle_version})-${BUILD_TIMESTAMP}-${BUILD_COMMIT}${BUILD_DIRTY_SUFFIX}"
+
+  set_or_add_plist_string "$plist_path" "StandUpBuildTimestamp" "$BUILD_TIMESTAMP"
+  set_or_add_plist_string "$plist_path" "StandUpBuildCommit" "${BUILD_COMMIT}${BUILD_DIRTY_SUFFIX}"
+  set_or_add_plist_string "$plist_path" "StandUpBuildID" "$build_id"
 }
 
 echo "Generating Xcode project..."
@@ -66,6 +104,8 @@ cp "$ICNS_PATH" "$XCODE_RESOURCES_DIR/AppIcon.icns"
 
 set_icon_plist_key "$APP_DIR/Contents/Info.plist"
 set_icon_plist_key "$XCODE_APP_DIR/Contents/Info.plist"
+set_build_metadata "$APP_DIR/Contents/Info.plist"
+set_build_metadata "$XCODE_APP_DIR/Contents/Info.plist"
 
 echo "Signing app bundle (ad-hoc + entitlements)..."
 codesign --force --sign - --entitlements "$APP_ENTITLEMENTS" \

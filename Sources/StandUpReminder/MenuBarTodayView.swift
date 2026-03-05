@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuBarTodayView: View {
     @EnvironmentObject private var viewModel: ReminderViewModel
+    private let buildInfo = AppBuildInfo.current
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -63,6 +64,19 @@ struct MenuBarTodayView: View {
                             .font(.caption)
                             .lineLimit(1)
                     }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(buildInfo.summaryLine)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(buildInfo.detailLine)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
 
                 Divider()

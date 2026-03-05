@@ -7,14 +7,17 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/haotingyi/Documents/workspaces/loki/my-reminder/dist/StandUpReminder.app/Contents/MacOS/StandUpReminder</string>
+        <string>/ABSOLUTE/PATH/TO/dist/StandUpReminder.app/Contents/MacOS/StandUpReminder</string>
     </array>
 
     <key>RunAtLoad</key>
     <true/>
 
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
 
     <key>StandardOutPath</key>
     <string>/tmp/standupreminder.log</string>

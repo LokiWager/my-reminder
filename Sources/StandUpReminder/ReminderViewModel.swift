@@ -2,6 +2,8 @@ import Foundation
 import EventKit
 import SwiftUI
 import UserNotifications
+import AppKit
+import Darwin
 
 @MainActor
 final class ReminderViewModel: ObservableObject {
@@ -23,15 +25,21 @@ final class ReminderViewModel: ObservableObject {
     private let notificationPermissionPromptedKey = "standup.notifications.prompted.v1"
     private let calendarNotificationLeadMinutes = 5
     private let defaults: UserDefaults
+    private let shouldManageScheduling: Bool
+    private let schedulingLockFD: Int32?
 
     private var lastKnownSettingsData: Data?
     private var lastKnownTodosData: Data?
     private var lastKnownShoppingData: Data?
     private var syncTask: Task<Void, Never>?
     private var applySettingsGeneration = 0
+    private var pendingApplySettingsGeneration: Int?
+    private var isApplySettingsInFlight = false
 
     init() {
         defaults = .standard
+        schedulingLockFD = Self.acquireSchedulingLock()
+        shouldManageScheduling = schedulingLockFD != nil
 
         let initialSettings: ReminderSettings
         let initialSettingsData: Data?
@@ -60,11 +68,19 @@ final class ReminderViewModel: ObservableObject {
         lastKnownShoppingData = loadedShopping.data
         applyMouseMoverSettings()
 
-        applySettings()
-        startSettingsSyncPolling()
+        if shouldManageScheduling {
+            applySettings()
+            startSettingsSyncPolling()
+        } else {
+            statusMessage = "Secondary instance detected. Scheduling is handled by the primary app instance."
+        }
     }
 
     deinit {
+        if let schedulingLockFD {
+            flock(schedulingLockFD, LOCK_UN)
+            close(schedulingLockFD)
+        }
         syncTask?.cancel()
     }
 
@@ -119,6 +135,9 @@ final class ReminderViewModel: ObservableObject {
                 guard let self else { return }
                 switch status {
                 case .authorized, .provisional, .ephemeral:
+                    if self.settings.isEnabled {
+                        self.applySettings()
+                    }
                     self.scheduleTestNotification()
                 case .notDetermined:
                     self.markNotificationPermissionPrompted()
@@ -128,6 +147,9 @@ final class ReminderViewModel: ObservableObject {
                             guard granted else {
                                 self.statusMessage = errorMessage ?? "Permission denied."
                                 return
+                            }
+                            if self.settings.isEnabled {
+                                self.applySettings()
                             }
                             self.scheduleTestNotification()
                         }
@@ -146,7 +168,9 @@ final class ReminderViewModel: ObservableObject {
         settings.isMouseMoverEnabled = enabled
         persistSettings()
         applyMouseMoverSettings()
-        statusMessage = enabled ? "Mouse mover enabled." : "Mouse mover disabled."
+        statusMessage = enabled
+            ? "Mouse mover enabled. Display idle sleep will be prevented."
+            : "Mouse mover disabled."
     }
 
     func setMouseMoverIdleThresholdMinutes(_ minutes: Int) {
@@ -169,6 +193,9 @@ final class ReminderViewModel: ObservableObject {
 
     func refreshFromStore() {
         reloadFromStoreIfNeeded(force: true)
+        if settings.isEnabled {
+            applySettings()
+        }
         if calendarAccessState == .granted {
             refreshCalendarEvents(for: calendarEventsDate, requestAccessIfNeeded: false)
         }
@@ -293,7 +320,6 @@ final class ReminderViewModel: ObservableObject {
         case .fullAccess:
             calendarAccessState = .granted
             loadCalendarEvents(for: dayStart)
-            syncCalendarEventNotificationsIfNeeded()
         case .writeOnly:
             calendarAccessState = .writeOnly
             calendarEvents = []
@@ -334,7 +360,9 @@ final class ReminderViewModel: ObservableObject {
                 if granted {
                     self.calendarAccessState = .granted
                     self.loadCalendarEvents(for: dayStart)
-                    self.syncCalendarEventNotificationsIfNeeded()
+                    if self.settings.isEnabled {
+                        self.applySettings()
+                    }
                 } else {
                     self.calendarAccessState = .denied
                     self.calendarEvents = []
@@ -388,57 +416,90 @@ final class ReminderViewModel: ObservableObject {
     }
 
     private func applySettings() {
+        guard shouldManageScheduling else { return }
         persistSettings()
         applyMouseMoverSettings()
         applySettingsGeneration &+= 1
-        let generation = applySettingsGeneration
+        pendingApplySettingsGeneration = applySettingsGeneration
+        startNextApplySettingsRunIfNeeded()
+    }
 
-        guard settings.isEnabled else {
+    private func startNextApplySettingsRunIfNeeded() {
+        guard !isApplySettingsInFlight else { return }
+        guard let generation = pendingApplySettingsGeneration else { return }
+        pendingApplySettingsGeneration = nil
+        isApplySettingsInFlight = true
+        runApplySettings(generation: generation)
+    }
+
+    private func runApplySettings(generation: Int) {
+        let settingsSnapshot = settings
+
+        guard settingsSnapshot.isEnabled else {
             scheduler.clearAll { [weak self] in
                 Task { @MainActor [weak self] in
-                    guard let self, generation == self.applySettingsGeneration else { return }
-                    self.statusMessage = "Reminders are off."
+                    guard let self else { return }
+                    if generation == self.applySettingsGeneration {
+                        self.statusMessage = "Reminders are off."
+                    }
+                    self.finishApplySettingsRun()
                 }
             }
             return
         }
 
-        let settingsSnapshot = settings
         scheduler.notificationAuthorizationStatus { [weak self] status in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard generation == self.applySettingsGeneration else {
+                    self.finishApplySettingsRun()
+                    return
+                }
 
                 switch status {
                 case .authorized, .provisional, .ephemeral:
-                    guard generation == self.applySettingsGeneration else { return }
-                    self.scheduleNotifications(settingsSnapshot, generation: generation)
-                case .denied:
-                    guard generation == self.applySettingsGeneration else { return }
-                    self.statusMessage = "Notification permission denied in System Settings."
-                case .notDetermined:
-                    guard generation == self.applySettingsGeneration else { return }
-                    if self.notificationPermissionPrompted() {
-                        self.statusMessage = "Notification permission not granted. Enable it in System Settings."
-                        return
+                    self.scheduleNotifications(settingsSnapshot, generation: generation) { [weak self] in
+                        Task { @MainActor [weak self] in
+                            self?.finishApplySettingsRun()
+                        }
                     }
-                    self.markNotificationPermissionPrompted()
+                case .denied:
+                    self.statusMessage = "Notification permission denied in System Settings."
+                    self.finishApplySettingsRun()
+                case .notDetermined:
+                    // Re-request when status is not determined. This avoids getting stuck after
+                    // app rebuild/re-sign where the system permission can reset while local
+                    // defaults still indicate a previous prompt.
                     self.scheduler.requestPermission { [weak self] granted, errorMessage in
                         Task { @MainActor [weak self] in
                             guard let self else { return }
-                            guard generation == self.applySettingsGeneration else { return }
-                            guard granted else {
-                                self.statusMessage = errorMessage ?? "Permission denied."
+                            guard generation == self.applySettingsGeneration else {
+                                self.finishApplySettingsRun()
                                 return
                             }
-                            self.scheduleNotifications(settingsSnapshot, generation: generation)
+                            guard granted else {
+                                self.statusMessage = errorMessage ?? "Permission denied."
+                                self.finishApplySettingsRun()
+                                return
+                            }
+                            self.scheduleNotifications(settingsSnapshot, generation: generation) { [weak self] in
+                                Task { @MainActor [weak self] in
+                                    self?.finishApplySettingsRun()
+                                }
+                            }
                         }
                     }
                 @unknown default:
-                    guard generation == self.applySettingsGeneration else { return }
                     self.statusMessage = "Unknown notification permission status."
+                    self.finishApplySettingsRun()
                 }
             }
         }
+    }
+
+    private func finishApplySettingsRun() {
+        isApplySettingsInFlight = false
+        startNextApplySettingsRunIfNeeded()
     }
 
     private func scheduleTestNotification() {
@@ -454,22 +515,42 @@ final class ReminderViewModel: ObservableObject {
         }
     }
 
-    private func scheduleNotifications(_ settingsSnapshot: ReminderSettings, generation: Int) {
+    private func scheduleNotifications(
+        _ settingsSnapshot: ReminderSettings,
+        generation: Int,
+        completion: @escaping @Sendable () -> Void
+    ) {
         scheduler.apply(settings: settingsSnapshot) { status in
             Task { @MainActor [weak self] in
-                guard let self, generation == self.applySettingsGeneration else { return }
-                self.syncCalendarEventNotificationsIfNeeded(baseStatus: status)
+                guard let self else {
+                    completion()
+                    return
+                }
+                guard generation == self.applySettingsGeneration else {
+                    completion()
+                    return
+                }
+                self.syncCalendarEventNotificationsIfNeeded(baseStatus: status, completion: completion)
             }
         }
     }
 
-    private func syncCalendarEventNotificationsIfNeeded(baseStatus: String? = nil) {
+    private func syncCalendarEventNotificationsIfNeeded(
+        baseStatus: String? = nil,
+        completion: (@Sendable () -> Void)? = nil
+    ) {
+        guard shouldManageScheduling else {
+            completion?()
+            return
+        }
+
         guard settings.isEnabled else {
             scheduler.clearCalendarNotifications { [weak self] in
                 Task { @MainActor [weak self] in
                     if let baseStatus {
                         self?.statusMessage = baseStatus
                     }
+                    completion?()
                 }
             }
             return
@@ -480,19 +561,25 @@ final class ReminderViewModel: ObservableObject {
             if let baseStatus {
                 statusMessage = baseStatus
             }
+            completion?()
             return
         }
 
         let items = upcomingCalendarNotificationItems()
         scheduler.replaceCalendarNotifications(items: items, leadMinutes: calendarNotificationLeadMinutes) { [weak self] calendarStatus in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard let baseStatus else { return }
-                if items.isEmpty {
-                    self.statusMessage = baseStatus
-                } else {
-                    self.statusMessage = "\(baseStatus) | \(calendarStatus)"
+                guard let self else {
+                    completion?()
+                    return
                 }
+                if let baseStatus {
+                    if items.isEmpty {
+                        self.statusMessage = baseStatus
+                    } else {
+                        self.statusMessage = "\(baseStatus) | \(calendarStatus)"
+                    }
+                }
+                completion?()
             }
         }
     }
@@ -712,5 +799,24 @@ final class ReminderViewModel: ObservableObject {
             minimumMoveGapSeconds: TimeInterval(settings.mouseMoverMoveIntervalMinutes * 60)
         )
         mouseMover.setEnabled(settings.isMouseMoverEnabled)
+    }
+
+    private static func isPrimaryProcessInstance() -> Bool {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return true }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let otherInstances = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { $0.processIdentifier != currentPID }
+        return otherInstances.isEmpty
+    }
+
+    private static func acquireSchedulingLock() -> Int32? {
+        let lockPath = NSTemporaryDirectory().appending("com.haotingyi.standupreminder.scheduler.lock")
+        let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
+        guard fd >= 0 else { return nil }
+        if flock(fd, LOCK_EX | LOCK_NB) == 0 {
+            return fd
+        }
+        close(fd)
+        return nil
     }
 }

@@ -65,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard enforceSingleInstance() else { return }
+
         if let iconPath = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
            let iconImage = NSImage(contentsOfFile: iconPath) {
             NSApp.applicationIconImage = iconImage
@@ -76,6 +78,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             name: NSWindow.willCloseNotification,
             object: nil
         )
+    }
+
+    @MainActor
+    private func enforceSingleInstance() -> Bool {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return true }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let otherInstances = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+            .filter { $0.processIdentifier != currentPID }
+
+        guard !otherInstances.isEmpty else { return true }
+
+        // If a second process is started (for example by LaunchAgent + manual open),
+        // keep the existing instance and terminate the duplicate process.
+        if let primary = otherInstances.first {
+            _ = primary.activate()
+        }
+        NSApp.terminate(nil)
+        return false
     }
 
     deinit {

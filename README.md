@@ -76,13 +76,15 @@ Leave it running in the background. It schedules the next 7 days of reminders an
 
 1. Build the app bundle (`./build-app.sh`).
 2. Copy `com.haotingyi.standupreminder.plist` to `~/Library/LaunchAgents/`.
-3. Edit the plist and set your absolute app executable path in `ProgramArguments` if different.
+3. Edit the plist and replace `/ABSOLUTE/PATH/TO/...` with your real app executable path.
 4. Load it:
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.haotingyi.standupreminder.plist 2>/dev/null || true
 launchctl load ~/Library/LaunchAgents/com.haotingyi.standupreminder.plist
 ```
+
+`Exit` performs a clean quit and will stay stopped until next login (or manual `launchctl start com.haotingyi.standupreminder`). Unexpected crashes are auto-restarted by LaunchAgent.
 
 To stop it:
 
