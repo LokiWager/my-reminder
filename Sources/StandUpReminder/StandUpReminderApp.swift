@@ -51,6 +51,9 @@ struct StandUpReminderApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    nonisolated(unsafe) private static var shared: AppDelegate?
+    private var skipNotificationCleanupOnTerminate = false
+
     @MainActor
     static func presentMainWindow() {
         _ = NSApp.setActivationPolicy(.regular)
@@ -60,11 +63,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @MainActor
+    static func requestUserQuit() {
+        shared?.skipNotificationCleanupOnTerminate = false
+        NSApp.terminate(nil)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !skipNotificationCleanupOnTerminate else {
+            return .terminateNow
+        }
+
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
+        return .terminateNow
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.shared = self
         guard enforceSingleInstance() else { return }
 
         if let iconPath = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
@@ -94,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let primary = otherInstances.first {
             _ = primary.activate()
         }
+        skipNotificationCleanupOnTerminate = true
         NSApp.terminate(nil)
         return false
     }

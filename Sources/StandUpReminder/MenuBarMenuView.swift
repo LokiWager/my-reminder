@@ -50,7 +50,7 @@ struct MenuBarMenuView: View {
             Divider()
 
             Button("Exit") {
-                NSApp.terminate(nil)
+                AppDelegate.requestUserQuit()
             }
             .keyboardShortcut("q")
         }

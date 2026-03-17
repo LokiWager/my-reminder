@@ -91,7 +91,7 @@ struct MenuBarTodayView: View {
                     }
                     .buttonStyle(.bordered)
                     Button("Exit") {
-                        NSApp.terminate(nil)
+                        AppDelegate.requestUserQuit()
                     }
                     .buttonStyle(.borderedProminent)
                 }
