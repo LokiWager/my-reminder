@@ -113,6 +113,7 @@ private struct ExtraReminderDraft: Identifiable, Equatable {
 struct ContentView: View {
     @EnvironmentObject private var viewModel: ReminderViewModel
     private let buildInfo = AppBuildInfo.current
+    private let schedulePlanner = ReminderSchedulePlanner()
 
     @State private var selection: AppSection? = .today
     @State private var periods: [PeriodDraft] = [
@@ -1017,7 +1018,7 @@ struct ContentView: View {
             return TimerSnapshot(headline: nil, subtitle: "Notifications are off.")
         }
 
-        guard isInActiveWindow(date) else {
+        guard schedulePlanner.isInActiveWindow(date, settings: viewModel.settings) else {
             return TimerSnapshot(
                 headline: nil,
                 subtitle: "Off work hours. No extra pay, handle your own plans."
@@ -1032,68 +1033,20 @@ struct ContentView: View {
     }
 
     private func progressSnapshot(for date: Date) -> DailyProgressSnapshot {
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: date)
-        let mondayIndex = (weekday + 5) % 7
-
-        guard viewModel.settings.activeDays.indices.contains(mondayIndex),
-              viewModel.settings.activeDays[mondayIndex] else {
-            return DailyProgressSnapshot(done: 0, total: dailyStandReminderSlots().count)
-        }
-
-        let slots = dailyStandReminderSlots()
-        let nowMinute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
-        let done = slots.filter { $0 <= nowMinute }.count
-        return DailyProgressSnapshot(done: done, total: slots.count)
+        let progress = schedulePlanner.standReminderProgress(at: date, settings: viewModel.settings)
+        return DailyProgressSnapshot(done: progress.done, total: progress.total)
     }
 
     private func minutesUntilNextStandReminder(from date: Date, inCurrentWindowOnly: Bool = false) -> Int? {
-        guard viewModel.settings.intervalMinutes > 0 else {
+        guard let nextReminderDate = schedulePlanner.nextStandReminderDate(
+            from: date,
+            settings: viewModel.settings,
+            inCurrentWindowOnly: inCurrentWindowOnly
+        ) else {
             return nil
         }
 
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: date)
-        let slots = dailyStandReminderSlots()
-        guard !slots.isEmpty else {
-            return nil
-        }
-
-        for offset in 0 ... 13 {
-            if inCurrentWindowOnly && offset > 0 {
-                break
-            }
-            guard let targetDay = calendar.date(byAdding: .day, value: offset, to: dayStart) else { continue }
-            let weekday = calendar.component(.weekday, from: targetDay)
-            let mondayIndex = (weekday + 5) % 7
-
-            guard viewModel.settings.activeDays.indices.contains(mondayIndex),
-                  viewModel.settings.activeDays[mondayIndex] else {
-                continue
-            }
-
-            for minute in slots {
-                let hour = minute / 60
-                let min = minute % 60
-                guard let reminderDate = calendar.date(bySettingHour: hour, minute: min, second: 0, of: targetDay) else {
-                    continue
-                }
-
-                if inCurrentWindowOnly {
-                    let currentMinute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
-                    let activeInThisWindow = viewModel.settings.periods.contains { period in
-                        period.isValid && currentMinute >= period.startMinutes && currentMinute <= period.endMinutes &&
-                            minute >= period.startMinutes && minute <= period.endMinutes
-                    }
-                    guard activeInThisWindow else { continue }
-                }
-
-                if reminderDate > date {
-                    return max(Int(ceil(reminderDate.timeIntervalSince(date) / 60.0)), 1)
-                }
-            }
-        }
-        return nil
+        return max(Int(ceil(nextReminderDate.timeIntervalSince(date) / 60.0)), 1)
     }
 
     private func todayItemLines(for date: Date) -> [String] {
@@ -1109,7 +1062,7 @@ struct ContentView: View {
             }
             .sorted { $0.timeMinutes < $1.timeMinutes }
             .map { reminder in
-                "\(reminder.title) · \(ReminderScheduler.formatMinutes(reminder.timeMinutes))"
+                "\(reminder.title) · \(ReminderSchedulePlanner.formatMinutes(reminder.timeMinutes))"
             }
     }
 
@@ -1119,40 +1072,6 @@ struct ContentView: View {
             return []
         }
         return viewModel.calendarEvents
-    }
-
-    private func dailyStandReminderSlots() -> [Int] {
-        var slots: Set<Int> = []
-        let sitInterval = max(viewModel.settings.intervalMinutes, 1)
-        let standBreak = max(viewModel.settings.standMinutes, 1)
-        let cycle = sitInterval + standBreak
-
-        for period in viewModel.settings.periods where period.isValid {
-            var cursor = period.startMinutes + sitInterval
-            while cursor <= period.endMinutes {
-                slots.insert(cursor)
-                cursor += cycle
-            }
-        }
-
-        return slots.sorted()
-    }
-
-    private func isInActiveWindow(_ date: Date) -> Bool {
-        guard viewModel.settings.isEnabled else {
-            return false
-        }
-
-        let calendar = Calendar.current
-        let weekday = calendar.component(.weekday, from: date)
-        let mondayIndex = (weekday + 5) % 7
-        guard viewModel.settings.activeDays.indices.contains(mondayIndex),
-              viewModel.settings.activeDays[mondayIndex] else {
-            return false
-        }
-
-        let minute = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
-        return viewModel.settings.periods.contains { $0.isValid && minute >= $0.startMinutes && minute <= $0.endMinutes }
     }
 
     private func insightRow(_ title: String, value: String) -> some View {
@@ -1229,8 +1148,8 @@ private struct MinuteTimePicker: View {
         DatePicker(
             title,
             selection: Binding(
-                get: { ReminderScheduler.minutesToDate(minutes) },
-                set: { minutes = ReminderScheduler.dateToMinutes($0) }
+                get: { ReminderSchedulePlanner.minutesToDate(minutes) },
+                set: { minutes = ReminderSchedulePlanner.dateToMinutes($0) }
             ),
             displayedComponents: .hourAndMinute
         )

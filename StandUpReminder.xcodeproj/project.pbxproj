@@ -13,10 +13,10 @@
 		4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */; };
 		5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD68F48786509C349657A3BC /* AssistantModels.swift */; };
 		5EBF201A4258A70F3473A5D7 /* logo_chibi.png in Resources */ = {isa = PBXBuildFile; fileRef = F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */; };
+		86C6FD49E1100E4B58FAAC8D /* ReminderSchedulePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1781C87D57E45B453DB561A /* ReminderSchedulePlanner.swift */; };
 		8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */; };
 		94BA6764EE636A7D9C81D341 /* MouseMoverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64A6EC9D6C706B69652AADD /* MouseMoverService.swift */; };
 		97D719C4C3997851941825E9 /* MenuBarMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C5301B6614357672D49242 /* MenuBarMenuView.swift */; };
-		BFFF9E87418569391991BED1 /* MenuBarTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */; };
 		EA2EA5DED68BCE84DDEA78F1 /* ReminderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */; };
 		F13801F0D981C5510AFD65AA /* StandUpReminderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */; };
 /* End PBXBuildFile section */
@@ -25,13 +25,13 @@
 		35198ACD41994F53BA36B6B9 /* menubar_icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = menubar_icon.png; sourceTree = "<group>"; };
 		53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
 		64E9FC30A537CB6D46E31824 /* AppBuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuildInfo.swift; sourceTree = "<group>"; };
-		84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarTodayView.swift; sourceTree = "<group>"; };
 		8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A0510F94E70390EDC1F12533 /* StandUpReminder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StandUpReminder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B6B7077FE4774B6ECAC49C93 /* StandUpReminderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandUpReminderApp.swift; sourceTree = "<group>"; };
 		BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSettings.swift; sourceTree = "<group>"; };
 		C64A6EC9D6C706B69652AADD /* MouseMoverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseMoverService.swift; sourceTree = "<group>"; };
 		CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderViewModel.swift; sourceTree = "<group>"; };
+		F1781C87D57E45B453DB561A /* ReminderSchedulePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSchedulePlanner.swift; sourceTree = "<group>"; };
 		F27A4AEDDD6E270F15B61BE8 /* logo_chibi.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = logo_chibi.png; sourceTree = "<group>"; };
 		F5C5301B6614357672D49242 /* MenuBarMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenuView.swift; sourceTree = "<group>"; };
 		FD68F48786509C349657A3BC /* AssistantModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantModels.swift; sourceTree = "<group>"; };
@@ -71,8 +71,8 @@
 				FD68F48786509C349657A3BC /* AssistantModels.swift */,
 				8F30BE2F5C53A15FC9121FF5 /* ContentView.swift */,
 				F5C5301B6614357672D49242 /* MenuBarMenuView.swift */,
-				84FF9D67970902324CCA7577 /* MenuBarTodayView.swift */,
 				C64A6EC9D6C706B69652AADD /* MouseMoverService.swift */,
+				F1781C87D57E45B453DB561A /* ReminderSchedulePlanner.swift */,
 				53FFF7706F1C60DE8FE77DE8 /* ReminderScheduler.swift */,
 				BF51B12E4EDCBAEAA43F9121 /* ReminderSettings.swift */,
 				CF6480C36873D3D9859A5B8D /* ReminderViewModel.swift */,
@@ -152,8 +152,8 @@
 				5AA9E2828B2350EFEB5E5224 /* AssistantModels.swift in Sources */,
 				317F06D5FFEA867FE7103EDE /* ContentView.swift in Sources */,
 				97D719C4C3997851941825E9 /* MenuBarMenuView.swift in Sources */,
-				BFFF9E87418569391991BED1 /* MenuBarTodayView.swift in Sources */,
 				94BA6764EE636A7D9C81D341 /* MouseMoverService.swift in Sources */,
+				86C6FD49E1100E4B58FAAC8D /* ReminderSchedulePlanner.swift in Sources */,
 				8A8908B5B8CE12CE503CF5CB /* ReminderScheduler.swift in Sources */,
 				4F9BE78DA8E3C86A6F2E9184 /* ReminderSettings.swift in Sources */,
 				EA2EA5DED68BCE84DDEA78F1 /* ReminderViewModel.swift in Sources */,

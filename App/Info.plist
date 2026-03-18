@@ -22,8 +22,12 @@
     <string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>StandUpReminder needs calendar access to refresh your events and schedule calendar reminders.</string>
     <key>NSCalendarsUsageDescription</key>
     <string>StandUpReminder needs calendar access to show your daily events in the Calendar page.</string>
+    <key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+    <string>StandUpReminder may create calendar-related reminders if you choose to enable them.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

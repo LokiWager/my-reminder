@@ -8,7 +8,7 @@ struct TimeRange: Codable, Equatable {
     static let evening = TimeRange(startMinutes: 19 * 60, endMinutes: 21 * 60)
 
     var isValid: Bool {
-        startMinutes <= endMinutes
+        startMinutes < endMinutes
     }
 }
 

@@ -1,90 +1,71 @@
 # StandUpReminder (macOS)
 
-A lightweight macOS reminder app that sends notifications on weekdays:
+StandUpReminder is a macOS menu bar app for:
 
-- Every **45 minutes**
-- Reminding you to stand up for **15 minutes**
-- During **13:00-17:00** and **19:00-21:00**
+- recurring stand-up reminders during configurable work periods
+- fixed-time reminder items such as standup, study, or dinner
+- optional calendar event reminders
+- lightweight todo, shopping, and mouse-mover utilities
 
-The app now includes:
+## Notification model
 
-- A **Control** page with a single **Turn On / Turn Off** button
-- A **Settings** page to set runnable reminder periods and timing values
-- A generated custom app icon embedded into the `.app` bundle
+Recurring stand-up reminders and fixed-time reminder items are scheduled as persistent macOS local notifications with `UNCalendarNotificationTrigger`.
 
-## Build CLI Binary
+That means reminders such as a daily `14:30` stand-up slot are stored by the system once permission is granted, instead of depending on an in-process timer staying alive.
+
+Calendar event reminders are refreshed from the app and scheduled as one-time local notifications.
+
+## Development
+
+Build the Swift package:
+
+```bash
+swift build
+```
+
+Run tests:
+
+```bash
+swift test
+```
+
+Build a release binary:
 
 ```bash
 swift build -c release
 ```
 
-Binary path:
-
-```bash
-./.build/release/StandUpReminder
-```
-
-## Build Clickable `.app` (with Widget)
+## Build the `.app`
 
 ```bash
 ./build-app.sh
 ```
 
-App bundle path:
+This script:
 
-```bash
-./dist/StandUpReminder.app
-```
+- regenerates `StandUpReminder.xcodeproj` from `project.yml`
+- builds the macOS app in Release mode
+- generates `AppIcon.icns` from `Assets/AppIconSource.png`
+- copies the finished bundle into `dist/`
+- signs the app ad hoc
 
-`build-app.sh` now:
-
-- Generates Xcode project files from `project.yml`
-- Builds the macOS app and `StandUpReminderWidgetExtension`
-- Generates `AppIcon.icns` from `/Users/haotingyi/Documents/workspaces/loki/my-reminder/scripts/generate-icon.swift`
-- Signs the final app bundle ad-hoc
-
-Launch from Finder by double-clicking `StandUpReminder.app`, or:
+Open the built app with:
 
 ```bash
 open ./dist/StandUpReminder.app
 ```
 
-When opened:
+## Run on Login
 
-1. Go to **Settings** tab and set your periods.
-2. Click **Save Settings**.
-3. Go to **Control** tab and click **Turn On**.
-
-## Add the Widget
-
-1. Launch `StandUpReminder.app` at least once.
-2. Open Notification Center, then click **Edit Widgets**.
-3. Search for **StandUpReminder**.
-4. Add the widget (small or medium).
-
-If it does not appear immediately, quit/reopen the app and reopen Widget Gallery.
-
-## Run (CLI)
-
-```bash
-./.build/release/StandUpReminder
-```
-
-Leave it running in the background. It schedules the next 7 days of reminders and refreshes automatically.
-
-## Run on login (LaunchAgent)
-
-1. Build the app bundle (`./build-app.sh`).
+1. Build the app bundle with `./build-app.sh`.
 2. Copy `com.haotingyi.standupreminder.plist` to `~/Library/LaunchAgents/`.
-3. Edit the plist and replace `/ABSOLUTE/PATH/TO/...` with your real app executable path.
-4. Load it:
+3. Replace `/ABSOLUTE/PATH/TO/...` in the plist with the real app executable path.
+4. Load the agent:
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.haotingyi.standupreminder.plist 2>/dev/null || true
 launchctl load ~/Library/LaunchAgents/com.haotingyi.standupreminder.plist
 ```
-
-`Exit` performs a clean quit and will stay stopped until next login (or manual `launchctl start com.haotingyi.standupreminder`). Unexpected crashes are auto-restarted by LaunchAgent.
 
 To stop it:
 

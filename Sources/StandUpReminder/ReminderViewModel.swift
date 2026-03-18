@@ -2,7 +2,6 @@ import Foundation
 import EventKit
 import SwiftUI
 import UserNotifications
-import AppKit
 import Darwin
 
 @MainActor
@@ -18,13 +17,13 @@ final class ReminderViewModel: ObservableObject {
 
     private let scheduler = ReminderScheduler()
     private let mouseMover = MouseMoverService()
-    private let eventStore = EKEventStore()
+    private var eventStore: EKEventStore
     private let settingsKey = "standup.settings.v1"
     private let todosKey = "assistant.todos.v1"
     private let shoppingKey = "assistant.shopping.v1"
-    private let notificationPermissionPromptedKey = "standup.notifications.prompted.v1"
     private let calendarNotificationLeadMinutes = 5
     private let defaults: UserDefaults
+    private let calendarAppDefaults = UserDefaults(suiteName: "com.apple.iCal")
     private let shouldManageScheduling: Bool
     private let schedulingLockFD: Int32?
 
@@ -32,12 +31,15 @@ final class ReminderViewModel: ObservableObject {
     private var lastKnownTodosData: Data?
     private var lastKnownShoppingData: Data?
     private var syncTask: Task<Void, Never>?
+    private var calendarStoreRefreshTask: Task<Void, Never>?
+    nonisolated(unsafe) private var calendarStoreObserver: NSObjectProtocol?
     private var applySettingsGeneration = 0
     private var pendingApplySettingsGeneration: Int?
     private var isApplySettingsInFlight = false
 
     init() {
         defaults = .standard
+        eventStore = EKEventStore()
         schedulingLockFD = Self.acquireSchedulingLock()
         shouldManageScheduling = schedulingLockFD != nil
 
@@ -67,6 +69,7 @@ final class ReminderViewModel: ObservableObject {
         shoppingItems = loadedShopping.items
         lastKnownShoppingData = loadedShopping.data
         applyMouseMoverSettings()
+        observeCalendarStoreChanges()
 
         if shouldManageScheduling {
             applySettings()
@@ -82,6 +85,10 @@ final class ReminderViewModel: ObservableObject {
             close(schedulingLockFD)
         }
         syncTask?.cancel()
+        calendarStoreRefreshTask?.cancel()
+        if let calendarStoreObserver {
+            NotificationCenter.default.removeObserver(calendarStoreObserver)
+        }
     }
 
     var pendingTodoCount: Int {
@@ -140,7 +147,6 @@ final class ReminderViewModel: ObservableObject {
                     }
                     self.scheduleTestNotification()
                 case .notDetermined:
-                    self.markNotificationPermissionPrompted()
                     self.scheduler.requestPermission { [weak self] granted, errorMessage in
                         Task { @MainActor [weak self] in
                             guard let self else { return }
@@ -205,13 +211,13 @@ final class ReminderViewModel: ObservableObject {
         let periodSummary = settings.periods
             .enumerated()
             .map { index, period in
-                "Period \(index + 1): \(ReminderScheduler.formatRange(period))"
+                "Period \(index + 1): \(ReminderSchedulePlanner.formatRange(period))"
             }
             .joined(separator: "   ")
 
         let customSummary = settings.extraReminders
             .filter(\.isEnabled)
-            .map { "\($0.title): \(ReminderScheduler.formatMinutes($0.timeMinutes))" }
+            .map { "\($0.title): \(ReminderSchedulePlanner.formatMinutes($0.timeMinutes))" }
             .joined(separator: "   ")
 
         guard !customSummary.isEmpty else {
@@ -319,7 +325,9 @@ final class ReminderViewModel: ObservableObject {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess:
             calendarAccessState = .granted
+            refreshCalendarStore()
             loadCalendarEvents(for: dayStart)
+            syncCalendarEventNotificationsIfNeeded()
         case .writeOnly:
             calendarAccessState = .writeOnly
             calendarEvents = []
@@ -359,6 +367,7 @@ final class ReminderViewModel: ObservableObject {
                 guard let self else { return }
                 if granted {
                     self.calendarAccessState = .granted
+                    self.refreshCalendarStore()
                     self.loadCalendarEvents(for: dayStart)
                     if self.settings.isEnabled {
                         self.applySettings()
@@ -384,7 +393,8 @@ final class ReminderViewModel: ObservableObject {
             return
         }
 
-        let predicate = eventStore.predicateForEvents(withStart: dayStart, end: dayEnd, calendars: nil)
+        let visibleCalendars = visibleEventCalendars()
+        let predicate = eventStore.predicateForEvents(withStart: dayStart, end: dayEnd, calendars: visibleCalendars)
         let events = eventStore.events(matching: predicate)
             .sorted { lhs, rhs in
                 if lhs.startDate == rhs.startDate {
@@ -408,10 +418,10 @@ final class ReminderViewModel: ObservableObject {
         }
 
         if calendarEvents.isEmpty {
-            calendarStatusMessage = "No events for selected date."
+            calendarStatusMessage = "No visible events for selected date. Refreshed \(refreshTimestampLabel())."
         } else {
             let dateLabel = dayStart.formatted(date: .abbreviated, time: .omitted)
-            calendarStatusMessage = "\(calendarEvents.count) events on \(dateLabel)."
+            calendarStatusMessage = "\(calendarEvents.count) events on \(dateLabel). Refreshed \(refreshTimestampLabel())."
         }
     }
 
@@ -591,7 +601,12 @@ final class ReminderViewModel: ObservableObject {
             return []
         }
 
-        let predicate = eventStore.predicateForEvents(withStart: now, end: endDate, calendars: nil)
+        refreshCalendarStore()
+        let predicate = eventStore.predicateForEvents(
+            withStart: now,
+            end: endDate,
+            calendars: visibleEventCalendars()
+        )
         return eventStore.events(matching: predicate)
             .sorted { lhs, rhs in
                 if lhs.startDate == rhs.startDate {
@@ -613,12 +628,75 @@ final class ReminderViewModel: ObservableObject {
             }
     }
 
-    private func notificationPermissionPrompted() -> Bool {
-        defaults.bool(forKey: notificationPermissionPromptedKey)
+    private func observeCalendarStoreChanges() {
+        calendarStoreObserver = NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduleCalendarStoreRefresh()
+            }
+        }
     }
 
-    private func markNotificationPermissionPrompted() {
-        defaults.set(true, forKey: notificationPermissionPromptedKey)
+    private func scheduleCalendarStoreRefresh() {
+        calendarStoreRefreshTask?.cancel()
+        let selectedDate = calendarEventsDate
+        calendarStoreRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            self?.refreshCalendarEvents(for: selectedDate, requestAccessIfNeeded: false)
+        }
+    }
+
+    private func refreshCalendarStore() {
+        recreateEventStore()
+        eventStore.refreshSourcesIfNecessary()
+    }
+
+    private func recreateEventStore() {
+        if let calendarStoreObserver {
+            NotificationCenter.default.removeObserver(calendarStoreObserver)
+            self.calendarStoreObserver = nil
+        }
+        eventStore = EKEventStore()
+        observeCalendarStoreChanges()
+    }
+
+    private func refreshTimestampLabel() -> String {
+        Date.now.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func visibleEventCalendars() -> [EKCalendar]? {
+        let calendars = eventStore.calendars(for: .event)
+        let disabled = disabledCalendarIdentifiers()
+
+        guard !disabled.isEmpty else {
+            return nil
+        }
+
+        let filtered = calendars.filter { !disabled.contains($0.calendarIdentifier) }
+        return filtered
+    }
+
+    private func disabledCalendarIdentifiers() -> Set<String> {
+        guard let raw = calendarAppDefaults?.dictionary(forKey: "DisabledCalendars") else {
+            return []
+        }
+
+        let identifiers = raw.values.flatMap { value -> [String] in
+            switch value {
+            case let array as [String]:
+                return array
+            case let array as [Any]:
+                return array.compactMap { $0 as? String }
+            default:
+                return []
+            }
+        }
+
+        return Set(identifiers)
     }
 
     private func persistSettings() {
@@ -799,14 +877,6 @@ final class ReminderViewModel: ObservableObject {
             minimumMoveGapSeconds: TimeInterval(settings.mouseMoverMoveIntervalMinutes * 60)
         )
         mouseMover.setEnabled(settings.isMouseMoverEnabled)
-    }
-
-    private static func isPrimaryProcessInstance() -> Bool {
-        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return true }
-        let currentPID = ProcessInfo.processInfo.processIdentifier
-        let otherInstances = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-            .filter { $0.processIdentifier != currentPID }
-        return otherInstances.isEmpty
     }
 
     private static func acquireSchedulingLock() -> Int32? {
