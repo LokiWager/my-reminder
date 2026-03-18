@@ -15,6 +15,8 @@ That means reminders such as a daily `14:30` stand-up slot are stored by the sys
 
 Calendar event reminders are refreshed from the app and scheduled as one-time local notifications.
 
+Each Mac keeps its own local notification queue. If you run the app on multiple computers, each computer can schedule and deliver reminders independently. Use `Schedule Notifications On This Mac` on secondary machines to keep them in view-only mode.
+
 ## Development
 
 Build the Swift package:

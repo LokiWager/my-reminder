@@ -1,8 +1,25 @@
 import Foundation
 import EventKit
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 import Darwin
+
+struct NotificationDebugItem: Identifiable, Equatable {
+    let id: String
+    let identifier: String
+    let sourceLabel: String
+    let title: String
+    let body: String
+    let threadIdentifier: String
+    let categoryIdentifier: String
+    let triggerSummary: String
+    let nextTriggerDate: Date?
+    let deliveredAt: Date?
+    let repeats: Bool
+    let scheduledWeekday: Int?
+    let scheduledHour: Int?
+    let scheduledMinute: Int?
+}
 
 @MainActor
 final class ReminderViewModel: ObservableObject {
@@ -14,11 +31,18 @@ final class ReminderViewModel: ObservableObject {
     @Published var calendarEventsDate: Date = Calendar.current.startOfDay(for: .now)
     @Published var calendarStatusMessage: String = "Calendar not loaded."
     @Published var statusMessage: String = "Ready."
+    @Published var schedulesNotificationsOnThisMac: Bool
+    @Published var notificationAuthorizationDebugLabel: String = "Unknown"
+    @Published var pendingNotificationDebugItems: [NotificationDebugItem] = []
+    @Published var deliveredNotificationDebugItems: [NotificationDebugItem] = []
+    @Published var notificationDebugStatusMessage: String = "Notification debug info not loaded."
+    @Published var notificationDebugLastRefresh: Date?
 
     private let scheduler = ReminderScheduler()
     private let mouseMover = MouseMoverService()
     private var eventStore: EKEventStore
     private let settingsKey = "standup.settings.v1"
+    private let localSchedulingKey = "standup.localSchedulingEnabled.v1"
     private let todosKey = "assistant.todos.v1"
     private let shoppingKey = "assistant.shopping.v1"
     private let calendarNotificationLeadMinutes = 5
@@ -26,6 +50,7 @@ final class ReminderViewModel: ObservableObject {
     private let calendarAppDefaults = UserDefaults(suiteName: "com.apple.iCal")
     private let shouldManageScheduling: Bool
     private let schedulingLockFD: Int32?
+    let machineDisplayName: String
 
     private var lastKnownSettingsData: Data?
     private var lastKnownTodosData: Data?
@@ -40,6 +65,8 @@ final class ReminderViewModel: ObservableObject {
     init() {
         defaults = .standard
         eventStore = EKEventStore()
+        machineDisplayName = Self.currentMachineName()
+        schedulesNotificationsOnThisMac = defaults.object(forKey: localSchedulingKey) as? Bool ?? true
         schedulingLockFD = Self.acquireSchedulingLock()
         shouldManageScheduling = schedulingLockFD != nil
 
@@ -99,6 +126,10 @@ final class ReminderViewModel: ObservableObject {
         shoppingItems.filter { !$0.isCompleted }.count
     }
 
+    var isPrimarySchedulingInstance: Bool {
+        shouldManageScheduling
+    }
+
     var todosByManualOrder: [AssistantItem] {
         todoItems.sorted { lhs, rhs in
             if lhs.sortOrder == rhs.sortOrder {
@@ -136,7 +167,27 @@ final class ReminderViewModel: ObservableObject {
         applySettings()
     }
 
+    func setSchedulesNotificationsOnThisMac(_ enabled: Bool) {
+        guard schedulesNotificationsOnThisMac != enabled else { return }
+        schedulesNotificationsOnThisMac = enabled
+        defaults.set(enabled, forKey: localSchedulingKey)
+
+        guard shouldManageScheduling else {
+            statusMessage = enabled
+                ? "Secondary instance detected. Scheduling is handled by the primary app instance."
+                : localSchedulingDisabledMessage
+            return
+        }
+
+        applySettings()
+    }
+
     func sendTestNotification() {
+        guard schedulesNotificationsOnThisMac else {
+            statusMessage = "Enable scheduling on this Mac before sending a test notification."
+            return
+        }
+
         scheduler.notificationAuthorizationStatus { [weak self] status in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -204,6 +255,33 @@ final class ReminderViewModel: ObservableObject {
         }
         if calendarAccessState == .granted {
             refreshCalendarEvents(for: calendarEventsDate, requestAccessIfNeeded: false)
+        }
+    }
+
+    func refreshNotificationDebugInfo() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] notificationSettings in
+            let authorizationLabel = Self.notificationAuthorizationDescription(notificationSettings.authorizationStatus)
+
+            UNUserNotificationCenter.current().getPendingNotificationRequests { [weak self] requests in
+                let pendingItems = requests
+                    .map(Self.pendingNotificationDebugItem(from:))
+                    .sorted(by: Self.sortPendingNotificationDebugItems)
+
+                UNUserNotificationCenter.current().getDeliveredNotifications { [weak self] notifications in
+                    let deliveredItems = notifications
+                        .map(Self.deliveredNotificationDebugItem(from:))
+                        .sorted(by: Self.sortDeliveredNotificationDebugItems)
+
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        self.notificationAuthorizationDebugLabel = authorizationLabel
+                        self.pendingNotificationDebugItems = pendingItems
+                        self.deliveredNotificationDebugItems = deliveredItems
+                        self.notificationDebugLastRefresh = .now
+                        self.notificationDebugStatusMessage = "Loaded \(pendingItems.count) pending and \(deliveredItems.count) delivered notifications."
+                    }
+                }
+            }
         }
     }
 
@@ -445,6 +523,19 @@ final class ReminderViewModel: ObservableObject {
     private func runApplySettings(generation: Int) {
         let settingsSnapshot = settings
 
+        guard schedulesNotificationsOnThisMac else {
+            scheduler.clearAll { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if generation == self.applySettingsGeneration {
+                        self.statusMessage = self.localSchedulingDisabledMessage
+                    }
+                    self.finishApplySettingsRun()
+                }
+            }
+            return
+        }
+
         guard settingsSnapshot.isEnabled else {
             scheduler.clearAll { [weak self] in
                 Task { @MainActor [weak self] in
@@ -551,6 +642,13 @@ final class ReminderViewModel: ObservableObject {
     ) {
         guard shouldManageScheduling else {
             completion?()
+            return
+        }
+
+        guard schedulesNotificationsOnThisMac else {
+            scheduler.clearCalendarNotifications {
+                completion?()
+            }
             return
         }
 
@@ -759,7 +857,9 @@ final class ReminderViewModel: ObservableObject {
 
         settings = normalizedDecoded
         applyMouseMoverSettings()
-        statusMessage = normalizedDecoded.isEnabled ? "Notifications are active." : "Reminders are off."
+        statusMessage = schedulesNotificationsOnThisMac
+            ? (normalizedDecoded.isEnabled ? "Notifications are active." : "Reminders are off.")
+            : localSchedulingDisabledMessage
     }
 
     private func reloadItemsFromStoreIfNeeded(force: Bool, forKey key: String, kind: AssistantItemKind) {
@@ -877,6 +977,204 @@ final class ReminderViewModel: ObservableObject {
             minimumMoveGapSeconds: TimeInterval(settings.mouseMoverMoveIntervalMinutes * 60)
         )
         mouseMover.setEnabled(settings.isMouseMoverEnabled)
+    }
+
+    private var localSchedulingDisabledMessage: String {
+        "This Mac (\(machineDisplayName)) is view-only for reminders. Existing local notifications were cleared and no new ones will be scheduled here."
+    }
+
+    nonisolated private static func pendingNotificationDebugItem(from request: UNNotificationRequest) -> NotificationDebugItem {
+        let triggerDebug = triggerDebugMetadata(for: request.trigger)
+        return NotificationDebugItem(
+            id: request.identifier,
+            identifier: request.identifier,
+            sourceLabel: notificationSourceLabel(for: request.identifier),
+            title: request.content.title,
+            body: request.content.body,
+            threadIdentifier: request.content.threadIdentifier,
+            categoryIdentifier: request.content.categoryIdentifier,
+            triggerSummary: triggerDebug.summary,
+            nextTriggerDate: nextTriggerDate(for: request.trigger),
+            deliveredAt: nil,
+            repeats: triggerDebug.repeats,
+            scheduledWeekday: triggerDebug.weekday,
+            scheduledHour: triggerDebug.hour,
+            scheduledMinute: triggerDebug.minute
+        )
+    }
+
+    nonisolated private static func deliveredNotificationDebugItem(from notification: UNNotification) -> NotificationDebugItem {
+        let triggerDebug = triggerDebugMetadata(for: notification.request.trigger)
+        return NotificationDebugItem(
+            id: notification.request.identifier,
+            identifier: notification.request.identifier,
+            sourceLabel: notificationSourceLabel(for: notification.request.identifier),
+            title: notification.request.content.title,
+            body: notification.request.content.body,
+            threadIdentifier: notification.request.content.threadIdentifier,
+            categoryIdentifier: notification.request.content.categoryIdentifier,
+            triggerSummary: triggerDebug.summary,
+            nextTriggerDate: nextTriggerDate(for: notification.request.trigger),
+            deliveredAt: notification.date,
+            repeats: triggerDebug.repeats,
+            scheduledWeekday: triggerDebug.weekday,
+            scheduledHour: triggerDebug.hour,
+            scheduledMinute: triggerDebug.minute
+        )
+    }
+
+    nonisolated private static func sortPendingNotificationDebugItems(_ lhs: NotificationDebugItem, _ rhs: NotificationDebugItem) -> Bool {
+        switch (lhs.nextTriggerDate, rhs.nextTriggerDate) {
+        case let (left?, right?):
+            if left == right {
+                return lhs.identifier < rhs.identifier
+            }
+            return left < right
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        case (.none, .none):
+            return lhs.identifier < rhs.identifier
+        }
+    }
+
+    nonisolated private static func sortDeliveredNotificationDebugItems(_ lhs: NotificationDebugItem, _ rhs: NotificationDebugItem) -> Bool {
+        switch (lhs.deliveredAt, rhs.deliveredAt) {
+        case let (left?, right?):
+            if left == right {
+                return lhs.identifier < rhs.identifier
+            }
+            return left > right
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        case (.none, .none):
+            return lhs.identifier < rhs.identifier
+        }
+    }
+
+    nonisolated private static func notificationSourceLabel(for identifier: String) -> String {
+        if identifier.hasPrefix("standup-reminder-stand-") {
+            return "Stand-up"
+        }
+        if identifier.hasPrefix("standup-reminder-custom-") {
+            return "Custom Item"
+        }
+        if identifier.hasPrefix("standup-reminder-calendar-") {
+            return "Calendar"
+        }
+        if identifier.hasPrefix("standup-reminder-test-") {
+            return "Test"
+        }
+        return "Other"
+    }
+
+    nonisolated private static func notificationAuthorizationDescription(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined:
+            return "Not Determined"
+        case .denied:
+            return "Denied"
+        case .authorized:
+            return "Authorized"
+        case .provisional:
+            return "Provisional"
+        case .ephemeral:
+            return "Ephemeral"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    nonisolated private static func triggerDebugMetadata(for trigger: UNNotificationTrigger?) -> (
+        summary: String,
+        repeats: Bool,
+        weekday: Int?,
+        hour: Int?,
+        minute: Int?
+    ) {
+        guard let trigger else {
+            return ("No trigger", false, nil, nil, nil)
+        }
+
+        if let calendarTrigger = trigger as? UNCalendarNotificationTrigger {
+            let components = calendarTrigger.dateComponents
+            let timeText = timeText(
+                hour: components.hour,
+                minute: components.minute,
+                fallbackDate: calendarTrigger.nextTriggerDate()
+            )
+            let weekdayText = weekdayText(components.weekday)
+            let summary: String
+
+            if calendarTrigger.repeats {
+                let dayPrefix = weekdayText.map { "\($0) " } ?? ""
+                summary = "Calendar repeat · \(dayPrefix)\(timeText ?? "unknown time")"
+            } else if let nextTriggerDate = calendarTrigger.nextTriggerDate() {
+                summary = "Calendar once · \(nextTriggerDate.formatted(date: .abbreviated, time: .shortened))"
+            } else {
+                summary = "Calendar once"
+            }
+
+            return (summary, calendarTrigger.repeats, components.weekday, components.hour, components.minute)
+        }
+
+        if let intervalTrigger = trigger as? UNTimeIntervalNotificationTrigger {
+            let seconds = Int(intervalTrigger.timeInterval)
+            let summary = intervalTrigger.repeats
+                ? "Time interval repeat · \(seconds)s"
+                : "Time interval once · \(seconds)s"
+            return (summary, intervalTrigger.repeats, nil, nil, nil)
+        }
+
+        return ("Other trigger", trigger.repeats, nil, nil, nil)
+    }
+
+    nonisolated private static func nextTriggerDate(for trigger: UNNotificationTrigger?) -> Date? {
+        if let calendarTrigger = trigger as? UNCalendarNotificationTrigger {
+            return calendarTrigger.nextTriggerDate()
+        }
+        if let intervalTrigger = trigger as? UNTimeIntervalNotificationTrigger {
+            return intervalTrigger.nextTriggerDate()
+        }
+        return nil
+    }
+
+    nonisolated private static func weekdayText(_ weekday: Int?) -> String? {
+        guard let weekday else { return nil }
+        let symbols = Calendar.current.shortWeekdaySymbols
+        let index = weekday - 1
+        guard symbols.indices.contains(index) else { return nil }
+        return symbols[index]
+    }
+
+    nonisolated private static func timeText(hour: Int?, minute: Int?, fallbackDate: Date?) -> String? {
+        if let hour, let minute {
+            var components = DateComponents()
+            components.hour = hour
+            components.minute = minute
+            if let date = Calendar.current.date(from: components) {
+                return date.formatted(date: .omitted, time: .shortened)
+            }
+        }
+
+        if let fallbackDate {
+            return fallbackDate.formatted(date: .omitted, time: .shortened)
+        }
+
+        return nil
+    }
+
+    private static func currentMachineName() -> String {
+        let localizedName = Host.current().localizedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !localizedName.isEmpty {
+            return localizedName
+        }
+
+        let hostName = ProcessInfo.processInfo.hostName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return hostName.isEmpty ? "This Mac" : hostName
     }
 
     private static func acquireSchedulingLock() -> Int32? {

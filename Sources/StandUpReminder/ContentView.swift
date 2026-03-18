@@ -7,6 +7,7 @@ private enum AppSection: String, CaseIterable, Hashable {
     case mouseMover
     case shopping
     case calendar
+    case debug
     case weather
     case preferences
 
@@ -18,6 +19,7 @@ private enum AppSection: String, CaseIterable, Hashable {
         case .mouseMover: return "Mouse Mover"
         case .shopping: return "Shopping"
         case .calendar: return "Calendar"
+        case .debug: return "Debug"
         case .weather: return "Weather"
         case .preferences: return "Preferences"
         }
@@ -31,6 +33,7 @@ private enum AppSection: String, CaseIterable, Hashable {
         case .mouseMover: return "cursorarrow.motionlines"
         case .shopping: return "cart"
         case .calendar: return "calendar"
+        case .debug: return "ladybug"
         case .weather: return "cloud.sun"
         case .preferences: return "gearshape"
         }
@@ -205,6 +208,8 @@ struct ContentView: View {
             shoppingView
         case .calendar:
             calendarView
+        case .debug:
+            debugView
         case .weather:
             weatherView
         case .preferences:
@@ -416,12 +421,29 @@ struct ContentView: View {
                         Text(viewModel.settings.isEnabled ? "All stand-up and reminder notifications are active." : "All notifications are disabled.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+
+                        Divider()
+
+                        Text("This Mac: \(viewModel.machineDisplayName)")
+                            .font(.footnote.weight(.semibold))
+
+                        Toggle("Schedule Notifications On This Mac", isOn: localSchedulingEnabledBinding)
+                            .toggleStyle(.switch)
+                        Text(
+                            viewModel.schedulesNotificationsOnThisMac
+                                ? "This Mac is allowed to create and refresh local reminder notifications."
+                                : "This Mac is in view-only mode. Existing local reminder notifications will be cleared and nothing new will be scheduled here."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                         Button {
                             viewModel.sendTestNotification()
                         } label: {
                             Label("Send Test Notification", systemImage: "bell.badge")
                         }
                         .buttonStyle(.bordered)
+                        .disabled(!viewModel.schedulesNotificationsOnThisMac)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -748,6 +770,119 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Weather")
+    }
+
+    private var debugView: some View {
+        let standSlotLabels = schedulePlanner.dailyStandSlots(settings: viewModel.settings).map(ReminderSchedulePlanner.formatMinutes)
+        let unexpectedStandUpItems = viewModel.pendingNotificationDebugItems.filter(isUnexpectedStandUpDebugItem)
+
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Notification Debug")
+                        .font(.title2.weight(.semibold))
+
+                    Spacer()
+
+                    Button("Refresh") {
+                        viewModel.refreshNotificationDebugInfo()
+                    }
+                }
+
+                GroupBox("Local State") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        insightRow("Machine", value: viewModel.machineDisplayName)
+                        insightRow("Primary instance", value: viewModel.isPrimarySchedulingInstance ? "Yes" : "No")
+                        insightRow("Local scheduling", value: viewModel.schedulesNotificationsOnThisMac ? "Enabled" : "Disabled")
+                        insightRow("Global reminders", value: viewModel.settings.isEnabled ? "Enabled" : "Disabled")
+                        insightRow("Notification auth", value: viewModel.notificationAuthorizationDebugLabel)
+                        insightRow(
+                            "Last refresh",
+                            value: viewModel.notificationDebugLastRefresh?.formatted(date: .abbreviated, time: .standard) ?? "Not loaded"
+                        )
+
+                        Text("Status: \(viewModel.statusMessage)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                GroupBox("Derived Stand-up Schedule") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        insightRow("Sit interval", value: "\(viewModel.settings.intervalMinutes) min")
+                        insightRow("Stand break", value: "\(viewModel.settings.standMinutes) min")
+                        insightRow("Active days", value: activeDaysSummary)
+                        insightRow("Periods", value: periodSummary)
+                        Text(
+                            standSlotLabels.isEmpty
+                                ? "Current settings produce no stand-up times."
+                                : "Current settings produce these stand-up times each active day: \(standSlotLabels.joined(separator: ", "))"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if !unexpectedStandUpItems.isEmpty {
+                    GroupBox("Unexpected Pending Stand-up Requests") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("These pending stand-up notifications do not match the current local stand-up settings.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            ForEach(unexpectedStandUpItems) { item in
+                                notificationDebugRow(item, highlightUnexpected: true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                GroupBox("Pending Notification Requests") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("\(viewModel.pendingNotificationDebugItems.count) request(s) currently scheduled in macOS for this app.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        if viewModel.pendingNotificationDebugItems.isEmpty {
+                            Text("No pending notifications.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(viewModel.pendingNotificationDebugItems) { item in
+                                notificationDebugRow(item)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                GroupBox("Recently Delivered") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if viewModel.deliveredNotificationDebugItems.isEmpty {
+                            Text("No delivered notifications captured by the system for this app.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(viewModel.deliveredNotificationDebugItems.prefix(12)) { item in
+                                notificationDebugRow(item)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Text(viewModel.notificationDebugStatusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Debug")
+        .onAppear {
+            viewModel.refreshNotificationDebugInfo()
+        }
     }
 
     private var preferencesView: some View {
@@ -1083,11 +1218,107 @@ struct ContentView: View {
         }
     }
 
+    private var activeDaysSummary: String {
+        let enabledDays = daySymbols.enumerated().compactMap { index, label in
+            viewModel.settings.activeDays.indices.contains(index) && viewModel.settings.activeDays[index] ? label : nil
+        }
+        return enabledDays.isEmpty ? "None" : enabledDays.joined(separator: ", ")
+    }
+
+    private var periodSummary: String {
+        let labels = viewModel.settings.periods
+            .filter(\.isValid)
+            .map(ReminderSchedulePlanner.formatRange)
+        return labels.isEmpty ? "None" : labels.joined(separator: "   ")
+    }
+
+    private func isUnexpectedStandUpDebugItem(_ item: NotificationDebugItem) -> Bool {
+        guard item.sourceLabel == "Stand-up" else { return false }
+        guard let hour = item.scheduledHour, let minute = item.scheduledMinute, let weekday = item.scheduledWeekday else {
+            return true
+        }
+
+        let standSlots = Set(schedulePlanner.dailyStandSlots(settings: viewModel.settings))
+        let minuteOfDay = (hour * 60) + minute
+        guard standSlots.contains(minuteOfDay) else {
+            return true
+        }
+
+        let mondayIndex = (weekday + 5) % 7
+        return !(viewModel.settings.activeDays.indices.contains(mondayIndex) && viewModel.settings.activeDays[mondayIndex])
+    }
+
+    private func notificationDebugRow(_ item: NotificationDebugItem, highlightUnexpected: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(item.sourceLabel)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(highlightUnexpected ? Color.red.opacity(0.18) : Color.secondary.opacity(0.12))
+                    .clipShape(Capsule())
+
+                if highlightUnexpected {
+                    Text("Unexpected")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Text(item.title.isEmpty ? "(No title)" : item.title)
+                .font(.headline)
+
+            if !item.body.isEmpty {
+                Text(item.body)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(item.triggerSummary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            if let nextTriggerDate = item.nextTriggerDate {
+                Text("Next fire: \(nextTriggerDate.formatted(date: .abbreviated, time: .standard))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let deliveredAt = item.deliveredAt {
+                Text("Delivered: \(deliveredAt.formatted(date: .abbreviated, time: .standard))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Thread: \(item.threadIdentifier.isEmpty ? "(none)" : item.threadIdentifier)")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Text("Identifier: \(item.identifier)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(highlightUnexpected ? Color.red.opacity(0.06) : Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
     private var notificationsEnabledBinding: Binding<Bool> {
         Binding(
             get: { viewModel.settings.isEnabled },
             set: { newValue in
                 viewModel.setNotificationsEnabled(newValue)
+            }
+        )
+    }
+
+    private var localSchedulingEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.schedulesNotificationsOnThisMac },
+            set: { newValue in
+                viewModel.setSchedulesNotificationsOnThisMac(newValue)
             }
         )
     }
